@@ -9,7 +9,7 @@
     "FL_GPU_RESOURCE_TRACE": "1",
     "FL_ALL_1D_AS_2D": "0",
     "FL_BC_TINY": "0",
-    "FL_BC_CAPABILITY_FALLBACK": "0",
+    "FL_BC_CAPABILITY_FALLBACK": "1",
     "FL_IMPORT_TRACE": "1"
   }
 }
