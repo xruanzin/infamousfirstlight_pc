@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - "runtime/**"
       - "src/hotfix/**"
+      - ".github/workflows/firstlight-hotfix.yml"
   pull_request:
     branches: [windows]
 
