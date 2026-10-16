@@ -48,6 +48,8 @@ jobs:
         run: |
           $exe = "out/launcher-dist/FirstLightLauncher-next.exe"
           $digest = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          git fetch origin firstlight-bootstrap
+          git checkout -B firstlight-bootstrap origin/firstlight-bootstrap
           $path = "runtime/update_manifest.json"
           $manifest = Get-Content $path -Raw | ConvertFrom-Json
           foreach ($file in $manifest.files) {
