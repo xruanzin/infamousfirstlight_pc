@@ -207,6 +207,10 @@ def main() -> int:
     # markers so a crash inside the proprietary AMD driver still identifies the exact API stage.
     env.setdefault("FL_GPU_RESOURCE_TRACE", "1")
     env.setdefault("FL_ALL_1D_AS_2D", "1")
+    # v1.04 introduces a sizeable import delta. Log the first call of each resolved host ABI by
+    # default so the first failing subsystem can be reconstructed from one crash log.
+    if values.get("APP_VER") == "01.04":
+        env.setdefault("FL_IMPORT_TRACE", "1")
     if args.import_trace is not None:
         if args.import_trace < 0:
             fail("--import-trace must be zero or greater")
@@ -236,6 +240,18 @@ def main() -> int:
         out / "firstlight-triage.json",
         env=env,
     )
+    triage_report = json.loads((out / "firstlight-triage.json").read_text(encoding="utf-8"))
+    revision = triage_report.get("revision_fingerprint", {})
+    exact_revision = revision.get("exact_revision")
+    if revision.get("mixed_revision_warning"):
+        fail("mixed First Light base/update files detected; eboot.bin, libc.prx and libSceFios2.prx must come from the same revision")
+    expected_revision = values.get("APP_VER") or values.get("VERSION")
+    if exact_revision and expected_revision in {"01.00", "01.04"} and exact_revision != expected_revision:
+        fail(f"param.sfo reports APP_VER={expected_revision}, but executable/PRX fingerprints are v{exact_revision}")
+    if exact_revision:
+        print(f"Verified executable revision: CUSA00575 v{exact_revision}")
+    else:
+        print("WARNING: executable/PRX hashes do not match a verified v1.00/v1.04 set; continuing for diagnostics.")
 
     module_args = ["libc.prx", "libSceFios2.prx"]
     # Optional title modules can be linked as native guest code without baking
