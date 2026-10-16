@@ -159,8 +159,10 @@ static u32 BufferImageCopySize(const vk::BufferImageCopy& copy, const vk::Format
 
     const auto block = vk::blockExtent(pixel_format);
     const u32 block_size = vk::blockSize(pixel_format);
-    const u32 row_pitch = (row_length / block[0]) * block_size;
-    const u32 slice_pitch = (height / block[1]) * row_pitch;
+    // Buffer strides for block-compressed images are measured in whole blocks. Use ceil
+    // division here as well: a logical 1-texel dimension still occupies one BC block.
+    const u32 row_pitch = ((row_length + block[0] - 1) / block[0]) * block_size;
+    const u32 slice_pitch = ((height + block[1] - 1) / block[1]) * row_pitch;
 
     const u32 width_in_blocks = (copy.imageExtent.width + block[0] - 1) / block[0];
     const u32 height_in_blocks = (copy.imageExtent.height + block[1] - 1) / block[1];
