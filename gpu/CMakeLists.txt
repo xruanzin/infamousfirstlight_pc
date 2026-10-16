@@ -274,6 +274,15 @@ if (WIN32)
     # The PS4 range (64 GiB - 1 TiB) must stay free: no high-entropy ASLR for heaps and stacks.
     # The guest main thread runs on the process stack: 16 MiB, committed (no stack probes).
     target_link_options(bb-probe PRIVATE -Wl,--disable-high-entropy-va "SHELL:-Xlinker --stack -Xlinker 16777216,16777216")
+    # Small title-specific ABI module. It is loaded dynamically by runtime_hotfix.c, so
+    # future First Light-only native fixes can ship as one DLL instead of rebuilding bb-probe.
+    add_library(firstlight-hotfix SHARED ../src/hotfix/firstlight_hotfix.c)
+    set_target_properties(firstlight-hotfix PROPERTIES
+        C_STANDARD 11
+        C_EXTENSIONS OFF
+        PREFIX ""
+        OUTPUT_NAME "firstlight_runtime")
+    target_compile_options(firstlight-hotfix PRIVATE -Wall -Wextra -Werror)
     add_executable(bb-gpu-capabilities ../tools/gpu_capabilities.c ../packaging/windows/bb-gpu-capabilities.rc)
     target_link_libraries(bb-gpu-capabilities PRIVATE Vulkan::Vulkan)
     # "Play Bloodborne.exe": the game with the launcher's saved settings, no launcher window.
