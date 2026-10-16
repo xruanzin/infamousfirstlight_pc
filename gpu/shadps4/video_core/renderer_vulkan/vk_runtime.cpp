@@ -385,6 +385,28 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
                      vk::AccessFlagBits2::eTransferRead);
     }
 
+    static const bool fl_decoded_upload_finish = [] {
+        const char* value = std::getenv("FL_GPU_DECODED_UPLOAD_FINISH");
+        return value && value[0] == '1';
+    }();
+    const bool isolate_decoded_1d =
+        fl_decoded_upload_finish && dst->info.props.is_bc_decoded &&
+        dst->info.size.height <= 1 &&
+        (dst->info.size.width >= 128 || dst->info.resources.layers > 1);
+    if (isolate_decoded_1d) {
+        if (fl_upload_trace) {
+            std::printf("GPU: FL upload #%llu isolate-submit begin\n",
+                        static_cast<unsigned long long>(fl_seq));
+            std::fflush(stdout);
+        }
+        scheduler.Finish();
+        if (fl_upload_trace) {
+            std::printf("GPU: FL upload #%llu isolate-submit end\n",
+                        static_cast<unsigned long long>(fl_seq));
+            std::fflush(stdout);
+        }
+    }
+
     dst->flags &= ~VideoCore::ImageFlagBits::Dirty;
 }
 
