@@ -128,6 +128,7 @@ if (Test-Path (Join-Path $Root "out\firstlight_runtime.dll")) {
     Copy-Item (Join-Path $Root "out\firstlight_runtime.dll") (Join-Path $OutputRoot "runtime\firstlight_runtime.dll") -Force
 }
 Copy-Item (Join-Path $Root "runtime\import_aliases.tsv") (Join-Path $OutputRoot "runtime\import_aliases.tsv") -Force
+Copy-Item (Join-Path $Root "runtime\firstlight_config.json") (Join-Path $OutputRoot "runtime\firstlight_config.json") -Force
 Copy-Item (Join-Path $Root "runtime\update_manifest.json") (Join-Path $OutputRoot "runtime\update_manifest.json") -Force
 Copy-Item (Join-Path $Root "out\bb-gpu-capabilities.exe") (Join-Path $OutputRoot "bin\") -Force
 if (Test-Path (Join-Path $Root "out\bb-play.exe")) {
