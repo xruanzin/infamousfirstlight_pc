@@ -428,10 +428,10 @@ void Runtime::CopyImage(VideoCore::Image* src, VideoCore::Image* dst) {
                   vk::to_string(src->info.pixel_format), vk::to_string(dst->info.pixel_format));
     }
 
-    const u32 base_width = src->info.size.width;
-    const u32 base_height = src->info.size.height;
+    const u32 base_width = std::min(src->info.size.width, dst->info.size.width);
+    const u32 base_height = std::min(src->info.size.height, dst->info.size.height);
     const u32 base_depth =
-        dst->info.type == AmdGpu::ImageType::Color3D ? dst->info.size.depth : src->info.size.depth;
+        std::min(src->info.size.depth, dst->info.size.depth);
 
     // Match sample count before copying
     SetBackingSamples(dst, dst->info.num_samples, false);
@@ -494,6 +494,31 @@ void Runtime::CopyImage(VideoCore::Image* src, VideoCore::Image* dst) {
         }
 
         regions.push_back(region);
+        static const bool fl_copy_trace = [] {
+            const char* value = std::getenv("FL_GPU_RESOURCE_TRACE");
+            return value && value[0] == '1';
+        }();
+        if (fl_copy_trace &&
+            (src->info.props.is_block || dst->info.props.is_block || src->info.props.is_host_2d ||
+             dst->info.props.is_host_2d || src->info.props.is_bc_decoded ||
+             dst->info.props.is_bc_decoded)) {
+            std::printf(
+                "BCN COPY DEBUG src=0x%llx fmt=%s hostType=%s layers=%u decoded=%u host2d=%u "
+                "dst=0x%llx fmt=%s hostType=%s layers=%u decoded=%u host2d=%u "
+                "mip=%u srcLayer=%u+%u dstLayer=%u+%u extent=%ux%ux%u\n",
+                static_cast<unsigned long long>(src->info.guest_address),
+                vk::to_string(src->info.pixel_format).c_str(),
+                vk::to_string(ConvertImageType(src->info)).c_str(), src->info.resources.layers,
+                src->info.props.is_bc_decoded ? 1u : 0u, src->info.props.is_host_2d ? 1u : 0u,
+                static_cast<unsigned long long>(dst->info.guest_address),
+                vk::to_string(dst->info.pixel_format).c_str(),
+                vk::to_string(ConvertImageType(dst->info)).c_str(), dst->info.resources.layers,
+                dst->info.props.is_bc_decoded ? 1u : 0u, dst->info.props.is_host_2d ? 1u : 0u,
+                mip, region.srcSubresource.baseArrayLayer, region.srcSubresource.layerCount,
+                region.dstSubresource.baseArrayLayer, region.dstSubresource.layerCount,
+                region.extent.width, region.extent.height, region.extent.depth);
+            std::fflush(stdout);
+        }
     }
 
     scheduler.EndRendering();
