@@ -70,6 +70,8 @@ foreach ($Name in $Scripts) {
 }
 Copy-Item (Join-Path $Root "tools\firstlight_triage.py") (Join-Path $OutputRoot "tools\") -Force
 Copy-Item (Join-Path $Root "tools\firstlight_coverage.py") (Join-Path $OutputRoot "tools\") -Force
+Copy-Item (Join-Path $Root "tools\firstlight_modules.py") (Join-Path $OutputRoot "tools\") -Force
+Copy-Item (Join-Path $Root "tools\firstlight_log.py") (Join-Path $OutputRoot "tools\") -Force
 Copy-Item (Join-Path $Root "tools\legacy-cpu-plan.json") (Join-Path $OutputRoot "tools\") -Force
 if (Test-Path (Join-Path $Root "patches\redzone.json")) {
     Copy-Item (Join-Path $Root "patches\redzone.json") (Join-Path $OutputRoot "patches\") -Force
