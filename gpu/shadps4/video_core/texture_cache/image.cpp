@@ -65,7 +65,8 @@ static vk::ImageType ConvertImageType(AmdGpu::ImageType type) noexcept {
     switch (type) {
     case AmdGpu::ImageType::Color1D:
     case AmdGpu::ImageType::Color1DArray:
-        return AmdGpu::All1DAs2D() ? vk::ImageType::e2D : vk::ImageType::e1D;
+        // Preserve the guest dimension. The known-good First Light path reaches Vulkan as 1D.
+        return vk::ImageType::e1D;
     case AmdGpu::ImageType::Color2D:
     case AmdGpu::ImageType::Color2DMsaa:
     case AmdGpu::ImageType::Color2DArray:
@@ -122,7 +123,7 @@ static vk::Result QueryImageSupport(const Vulkan::Instance& instance, vk::ImageT
 bool ApplyBc1DCapabilityFallback(const Vulkan::Instance& instance, ImageInfo& info) {
     static const bool enabled = [] {
         const char* value = std::getenv("FL_BC_CAPABILITY_FALLBACK");
-        return !value || value[0] != '0';
+        return value && value[0] == '1';
     }();
     if (!enabled || info.props.is_bc_decoded || !info.props.is_block || info.props.is_depth ||
         info.props.is_volume || info.num_samples != 1 || info.type != AmdGpu::ImageType::Color1D ||
@@ -311,17 +312,34 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
         }
     }
     if (image_format_properties.result != vk::Result::eSuccess) {
-        LOG_ERROR(Render_Vulkan,
-                  "Refusing unsupported image before vkCreateImage: format={} type={} flags={} "
-                  "usage={} result={} guest={:#x} size={}x{}x{} layers={} mips={} decoded={}",
-                  vk::to_string(supported_format), vk::to_string(format_info.type),
-                  vk::to_string(format_info.flags), vk::to_string(format_info.usage),
-                  vk::to_string(image_format_properties.result), info.guest_address,
-                  info.size.width, info.size.height, info.size.depth, info.resources.layers,
-                  info.resources.levels, info.props.is_bc_decoded);
-        ASSERT_MSG(false, "Unsupported Vulkan image combination was blocked before driver call");
+        const bool guest_bc_1d =
+            info.props.is_block && !info.props.is_bc_decoded && !info.props.is_host_2d &&
+            (info.type == AmdGpu::ImageType::Color1D ||
+             info.type == AmdGpu::ImageType::Color1DArray);
+        if (!guest_bc_1d) {
+            LOG_ERROR(Render_Vulkan,
+                      "Refusing unsupported image before vkCreateImage: format={} type={} flags={} "
+                      "usage={} result={} guest={:#x} size={}x{}x{} layers={} mips={} decoded={}",
+                      vk::to_string(supported_format), vk::to_string(format_info.type),
+                      vk::to_string(format_info.flags), vk::to_string(format_info.usage),
+                      vk::to_string(image_format_properties.result), info.guest_address,
+                      info.size.width, info.size.height, info.size.depth, info.resources.layers,
+                      info.resources.levels, info.props.is_bc_decoded);
+            ASSERT_MSG(false, "Unsupported Vulkan image combination was blocked before driver call");
+        }
+        // Parity with the known-good First Light build: keep the resource genuinely 1D and let
+        // vkCreateImage/VMA make the final decision. On the tested AMD driver this path advances
+        // even though the format-properties query reports unsupported for BC1/BC4 1D.
+        LOG_WARNING(Render_Vulkan,
+                    "ELTUTZ PARITY: capability query rejected guest BC 1D but creation will be "
+                    "attempted as 1D: guest={:#x} format={} type={} flags={} usage={}",
+                    info.guest_address, vk::to_string(supported_format),
+                    vk::to_string(format_info.type), vk::to_string(format_info.flags),
+                    vk::to_string(format_info.usage));
+        supported_samples = vk::SampleCountFlagBits::e1;
+    } else {
+        supported_samples = image_format_properties.value.imageFormatProperties.sampleCounts;
     }
-    supported_samples = image_format_properties.value.imageFormatProperties.sampleCounts;
 
     const vk::ImageCreateInfo image_ci = {
         .flags = flags,
