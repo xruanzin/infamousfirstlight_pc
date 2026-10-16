@@ -75,6 +75,32 @@ static void libc_support(void) {
     assert(runtime_application_heap_api()==heap);
     GET(SetHeap,"p5EcQeEeJAE#p#J")(NULL);
     assert(runtime_application_heap_api()==NULL);
+
+    typedef struct {
+        uint64_t size;
+        uint32_t flag;
+        uint32_t get_segment_info;
+        uint64_t *mspace_atomic_id_mask;
+        uint64_t *mstate_table;
+    } HeapTraceInfo;
+    typedef void (ABI *HeapTrace)(HeapTraceInfo *);
+    HeapTraceInfo trace={.size=sizeof(HeapTraceInfo),.flag=0x12345678,.get_segment_info=0xffffffff};
+    HeapTrace get_trace=GET(HeapTrace,"NWtTN10cJzE#libSceLibcInternalExt");
+    assert(get_trace);
+    get_trace(&trace);
+    assert(trace.flag==0x12345678); /* guest-owned field remains untouched */
+    assert(trace.get_segment_info==0);
+    assert(trace.mspace_atomic_id_mask && trace.mstate_table);
+    assert(*trace.mspace_atomic_id_mask==0 && trace.mstate_table[0]==0 && trace.mstate_table[63]==0);
+    *trace.mspace_atomic_id_mask=UINT64_C(0x55aa);
+    trace.mstate_table[7]=UINT64_C(0x1122334455667788);
+    HeapTraceInfo trace2={.size=sizeof(HeapTraceInfo)};
+    get_trace(&trace2);
+    assert(trace2.mspace_atomic_id_mask==trace.mspace_atomic_id_mask);
+    assert(trace2.mstate_table==trace.mstate_table);
+    assert(*trace2.mspace_atomic_id_mask==UINT64_C(0x55aa));
+    assert(trace2.mstate_table[7]==UINT64_C(0x1122334455667788));
+
     runtime_set_procparam(NULL);
 }
 static int order[512], count;
