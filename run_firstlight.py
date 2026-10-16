@@ -199,6 +199,9 @@ def main() -> int:
     # CUSA00575 until that path is proven safe; FL_VK_RECORD_THREAD=1 re-enables it for A/B.
     env["BB_VK_RECORD_THREAD"] = env.get("FL_VK_RECORD_THREAD", "0")
     env.setdefault("FL_GPU_UPLOAD_TRACE", "1")
+    # Trace Vulkan resource creation as well as uploads. This deliberately uses before/after
+    # markers so a crash inside the proprietary AMD driver still identifies the exact API stage.
+    env.setdefault("FL_GPU_RESOURCE_TRACE", "1")
     env.setdefault("FL_ALL_1D_AS_2D", "1")
     if args.import_trace is not None:
         if args.import_trace < 0:
