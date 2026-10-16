@@ -93,6 +93,34 @@ def metadata(game: Path) -> dict:
     return values
 
 
+def runtime_env_defaults() -> dict[str, str]:
+    defaults = {
+        "BB_VBLANK_HZ": "60",
+        "BB_FPS": "30",
+        "BB_CONTENT_SKU": "full",
+        "BB_VK_RECORD_THREAD": "0",
+        "FL_GPU_UPLOAD_TRACE": "1",
+        "FL_GPU_RESOURCE_TRACE": "1",
+        "FL_ALL_1D_AS_2D": "0",
+        "FL_BC_TINY": "0",
+        "FL_BC_CAPABILITY_FALLBACK": "0",
+        "FL_IMPORT_TRACE": "1",
+    }
+    path = PORT / "runtime" / "firstlight_config.json"
+    if not path.is_file():
+        return defaults
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        values = data.get("env_defaults", {})
+        if data.get("schema") == 1 and isinstance(values, dict):
+            for key, value in values.items():
+                if isinstance(key, str) and isinstance(value, (str, int, float, bool)):
+                    defaults[key] = str(value)
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"WARNING: ignoring invalid runtime config {path}: {exc}")
+    return defaults
+
+
 def bootstrap_summary(out: Path, values: dict) -> None:
     link_path = out / "link.json"
     triage_path = out / "firstlight-triage.json"
@@ -204,27 +232,13 @@ def main() -> int:
         BB_FORCE_PATCHES="",
         BB_PATCHES="",
     )
-    env.setdefault("BB_VBLANK_HZ", "60")
-    env.setdefault("BB_FPS", "30")
-    env.setdefault("BB_CONTENT_SKU", "full")
-
-    # First Light stability profile. The AMD Windows driver has repeatedly faulted while
-    # vkCmdCopyBufferToImage is being recorded. Keep the Vulkan recorder single-threaded for
-    # CUSA00575 until that path is proven safe; FL_VK_RECORD_THREAD=1 re-enables it for A/B.
-    env["BB_VK_RECORD_THREAD"] = env.get("FL_VK_RECORD_THREAD", "0")
-    env.setdefault("FL_GPU_UPLOAD_TRACE", "1")
-    # Trace Vulkan resource creation as well as uploads. This deliberately uses before/after
-    # markers so a crash inside the proprietary AMD driver still identifies the exact API stage.
-    env.setdefault("FL_GPU_RESOURCE_TRACE", "1")
-    # v1.04 A/B against the known-good 1D path: do not promote guest 1D resources to host 2D
-    # and do not pre-decode BC1-BC5. Let the real VK_IMAGE_TYPE_1D capability/create path run.
-    env.setdefault("FL_ALL_1D_AS_2D", "0")
-    env.setdefault("FL_BC_TINY", "0")
-    env.setdefault("FL_BC_CAPABILITY_FALLBACK", "0")
-    # v1.04 introduces a sizeable import delta. Log the first call of each resolved host ABI by
-    # default so the first failing subsystem can be reconstructed from one crash log.
-    if values.get("APP_VER") == "01.04":
-        env.setdefault("FL_IMPORT_TRACE", "1")
+    # Compatibility defaults are data, not code: runtime/firstlight_config.json can change
+    # these between launches without rebuilding FirstLightBootstrap.exe or bb-probe.exe.
+    for key, value in runtime_env_defaults().items():
+        env.setdefault(key, value)
+    # Preserve the old one-variable A/B switch as a command-shell override.
+    if env.get("FL_VK_RECORD_THREAD") is not None:
+        env["BB_VK_RECORD_THREAD"] = env["FL_VK_RECORD_THREAD"]
     if args.import_trace is not None:
         if args.import_trace < 0:
             fail("--import-trace must be zero or greater")
