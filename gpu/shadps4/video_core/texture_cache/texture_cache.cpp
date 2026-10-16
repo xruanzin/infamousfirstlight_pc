@@ -872,9 +872,24 @@ void TextureCache::RefreshImage(Image& image) {
 
 void TextureCache::UploadDecodedImage(Image& image) {
     // Guest memory remains BC-compressed; the host image is plain R/RG/RGBA texels.
-    // Decode only the small/1D resources selected by ImageInfo so the AMD Windows
-    // driver never receives the unsupported BC 1D image.
+    // Capability-driven BC1-BC5 fallback keeps the unsafe compressed 1D representation
+    // away from Vulkan while preserving the guest layout used for decoding.
     const ImageInfo& info = image.info;
+    static const bool fl_decode_trace = [] {
+        const char* value = std::getenv("FL_GPU_RESOURCE_TRACE");
+        return value && value[0] == '1';
+    }();
+    if (fl_decode_trace) {
+        std::printf(
+            "BCN DECODE DEBUG guest=0x%llx bc=%s host=%s size=%ux%ux%u layers=%u mips=%u "
+            "tile=%u array=%u pitch=%u guestBytes=%u mip0Pitch=%u mip0Height=%u\n",
+            static_cast<unsigned long long>(info.guest_address),
+            vk::to_string(info.bc_format).c_str(), vk::to_string(info.pixel_format).c_str(),
+            info.size.width, info.size.height, info.size.depth, info.resources.layers,
+            info.resources.levels, u32(info.tile_mode), u32(info.array_mode), info.pitch,
+            info.guest_size, info.mips_layout[0].pitch, info.mips_layout[0].height);
+        std::fflush(stdout);
+    }
     const auto kind = BcTinyDecodeKind(info.bc_format);
     ASSERT_MSG(kind.has_value(), "decoded BC image without a supported BC1-BC5 format");
 
