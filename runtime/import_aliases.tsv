@@ -1,0 +1,9 @@
+# First Light runtime import aliases
+# Format: NID-or-scoped-NID<TAB>runtime symbol
+# This file is read at launch; editing it does not require rebuilding bb-probe.exe.
+#
+# CUSA00575 v1.04 aliases discovered during bring-up:
+TywrFKCoLGY#F#G	sceSaveDataInitialize3
+ZkZhskCPXFw#F#G	sceSaveDataInitialize
+l1NmDeDpNGU#F#G	sceSaveDataInitialize2
+yKDy8S5yLA0#F#G	sceSaveDataTerminate
