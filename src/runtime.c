@@ -3,6 +3,7 @@
 #include "runtime.h"
 #include "gpu/bbgpu.h"
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
