@@ -272,6 +272,7 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
 
     constexpr auto tiling = vk::ImageTiling::eOptimal;
     const auto supported_format = instance.GetSupportedFormat(info.pixel_format, format_features);
+    const u32 host_layers = info.HostLayers();
     vk::PhysicalDeviceImageFormatInfo2 format_info{
         .format = supported_format,
         .type = info.props.is_host_2d ? vk::ImageType::e2D : ConvertImageType(info.type),
@@ -280,21 +281,34 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
         .flags = flags,
     };
     if (FlGpuResourceTrace()) {
-        std::printf("GPU: FL resource #%llu format-query begin guest=0x%llx guestType=%u hostType=%u format=%s size=%ux%ux%u mips=%u layers=%u host2d=%u decoded=%u usage=0x%x flags=0x%x\\n",
+        std::printf("GPU: FL resource #%llu format-query begin guest=0x%llx guestType=%u hostType=%u format=%s size=%ux%ux%u mips=%u guestLayers=%u hostLayers=%u host2d=%u decoded=%u usage=0x%x flags=0x%x\\n",
                     static_cast<unsigned long long>(image_uid),
                     static_cast<unsigned long long>(info.guest_address), u32(info.type),
                     u32(format_info.type), vk::to_string(supported_format).c_str(),
                     info.size.width, info.size.height, info.size.depth, info.resources.levels,
-                    info.resources.layers, info.props.is_host_2d ? 1u : 0u,
+                    info.resources.layers, host_layers, info.props.is_host_2d ? 1u : 0u,
                     info.props.is_bc_decoded ? 1u : 0u, u32(usage_flags), u32(flags));
         std::fflush(stdout);
     }
     auto image_format_properties =
         instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
     if (FlGpuResourceTrace()) {
-        std::printf("GPU: FL resource #%llu format-query end result=%s\\n",
-                    static_cast<unsigned long long>(image_uid),
-                    vk::to_string(image_format_properties.result).c_str());
+        if (image_format_properties.result == vk::Result::eSuccess) {
+            const auto& p = image_format_properties.value.imageFormatProperties;
+            const auto device_max_layers =
+                instance.GetPhysicalDevice().getProperties().limits.maxImageArrayLayers;
+            std::printf(
+                "GPU: FL resource #%llu format-query end result=%s maxArrayLayers=%u "
+                "deviceMaxArrayLayers=%u maxMips=%u maxExtent=%ux%ux%u\\n",
+                static_cast<unsigned long long>(image_uid),
+                vk::to_string(image_format_properties.result).c_str(), p.maxArrayLayers,
+                device_max_layers, p.maxMipLevels, p.maxExtent.width, p.maxExtent.height,
+                p.maxExtent.depth);
+        } else {
+            std::printf("GPU: FL resource #%llu format-query end result=%s\\n",
+                        static_cast<unsigned long long>(image_uid),
+                        vk::to_string(image_format_properties.result).c_str());
+        }
         std::fflush(stdout);
     }
     // bbport: storage usage is speculative (see ImageUsageFlags). Drivers that refuse it for a
@@ -311,6 +325,22 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
             format_info.usage = usage_flags;
         }
     }
+    if (image_format_properties.result == vk::Result::eSuccess) {
+        const auto& p = image_format_properties.value.imageFormatProperties;
+        const auto device_limits = instance.GetPhysicalDevice().getProperties().limits;
+        const bool exceeds =
+            host_layers > p.maxArrayLayers || host_layers > device_limits.maxImageArrayLayers ||
+            info.resources.levels > p.maxMipLevels || info.size.width > p.maxExtent.width ||
+            info.size.height > p.maxExtent.height || info.size.depth > p.maxExtent.depth;
+        ASSERT_MSG(!exceeds,
+                   "Host image exceeds Vulkan image-format properties: format={} hostLayers={} "
+                   "formatMaxLayers={} deviceMaxLayers={} mips={}/{} extent={}x{}x{} max={}x{}x{}",
+                   vk::to_string(supported_format), host_layers, p.maxArrayLayers,
+                   device_limits.maxImageArrayLayers, info.resources.levels, p.maxMipLevels,
+                   info.size.width, info.size.height, info.size.depth, p.maxExtent.width,
+                   p.maxExtent.height, p.maxExtent.depth);
+    }
+
     if (image_format_properties.result != vk::Result::eSuccess) {
         const bool guest_bc_1d =
             info.props.is_block && !info.props.is_bc_decoded && !info.props.is_host_2d &&
@@ -351,7 +381,7 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
             .depth = info.size.depth,
         },
         .mipLevels = static_cast<u32>(info.resources.levels),
-        .arrayLayers = static_cast<u32>(info.resources.layers),
+        .arrayLayers = host_layers,
         .samples = LiverpoolToVK::NumSamples(info.num_samples, supported_samples),
         .tiling = tiling,
         .usage = usage_flags,
@@ -377,7 +407,7 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
                           "Image {}x{}x{} {} {} {:#x}:{:#x} L:{} M:{} S:{}", info.size.width,
                           info.size.height, info.size.depth, AmdGpu::NameOf(info.tile_mode),
                           vk::to_string(info.pixel_format), info.guest_address, info.guest_size,
-                          info.resources.layers, info.resources.levels, info.num_samples);
+                          host_layers, info.resources.levels, info.num_samples);
 }
 
 Image::~Image() = default;
