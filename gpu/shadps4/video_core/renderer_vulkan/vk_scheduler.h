@@ -786,7 +786,16 @@ public:
             return data;
         }
         // Room for the data and the command that follows it, so both stay in one chunk.
+        // First Light can submit barrier/copy arrays larger than the 128 KiB recorder chunk
+        // while streaming world data.  Such a batch cannot be copied into deferred storage:
+        // synchronize once and execute the following Record() immediately instead of asserting.
         const size_t bytes = data.size_bytes();
+        if (bytes + alignof(T) + 1024 > RecordChunk::Capacity) {
+            SyncRecording();
+            direct_mode = true;
+            direct_recordings.fetch_add(1, std::memory_order_relaxed);
+            return data;
+        }
         ReserveRecordData(bytes + alignof(T));
         auto* dst = static_cast<T*>(record_chunk->Allocate(bytes, alignof(T)));
         std::memcpy(dst, data.data(), bytes);
