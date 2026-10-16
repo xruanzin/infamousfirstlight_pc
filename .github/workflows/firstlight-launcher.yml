@@ -1,0 +1,67 @@
+name: First Light launcher hotfix
+
+on:
+  push:
+    branches: [firstlight-bootstrap]
+    paths:
+      - "launcher_firstlight.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build launcher only
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -q pyinstaller
+          python -m PyInstaller --noconfirm --clean --log-level WARN --onefile --windowed --name FirstLightLauncher-next --distpath out/launcher-dist --workpath out/launcher-work --specpath out/launcher-work launcher_firstlight.py
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "out/launcher-dist/FirstLightLauncher-next.exe")) {
+            throw "Launcher build failed."
+          }
+
+      - name: Publish rolling launcher
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view firstlight-dev-launcher --repo ${{ github.repository }} *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create firstlight-dev-launcher --repo ${{ github.repository }} --prerelease --title "First Light development launcher" --notes "Rolling launcher used by the in-place update channel."
+          }
+          gh release upload firstlight-dev-launcher out/launcher-dist/FirstLightLauncher-next.exe --repo ${{ github.repository }} --clobber
+
+      - name: Refresh launcher digest
+        shell: pwsh
+        run: |
+          $exe = "out/launcher-dist/FirstLightLauncher-next.exe"
+          $digest = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $path = "runtime/update_manifest.json"
+          $manifest = Get-Content $path -Raw | ConvertFrom-Json
+          foreach ($file in $manifest.files) {
+            if ($file.path -eq "FirstLightLauncher-next.exe") {
+              $file.sha256 = $digest
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content $path -Encoding UTF8
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $path
+          if (-not (git diff --cached --quiet)) {
+            git commit -m "launcher: refresh rolling executable digest"
+            git push origin HEAD:firstlight-bootstrap
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firstlight-launcher-hotfix
+          path: out/launcher-dist/FirstLightLauncher-next.exe
+          if-no-files-found: error
