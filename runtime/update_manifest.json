@@ -34,6 +34,13 @@
       "required": false,
       "kind": "launcher",
       "sha256": "e826c6fe5719ecb4f066fcb16101cc603f9d963f0bb8c401540e02659e95fc24"
+    },
+    {
+      "path": "bin/bb-probe.exe",
+      "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-probe/bb-probe.exe",
+      "required": false,
+      "kind": "core",
+      "sha256": "78af3fff584e997662d2d846b0beec66369422d4f47b4359f2e11944b7313d42"
     }
   ]
 }
