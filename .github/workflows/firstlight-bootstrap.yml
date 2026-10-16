@@ -1,0 +1,26 @@
+name: First Light bootstrap checks
+
+on:
+  push:
+    branches: [firstlight-bootstrap]
+  pull_request:
+    branches: [windows]
+
+jobs:
+  bootstrap-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Python syntax
+        run: |
+          python -m py_compile             run_firstlight.py             tools/firstlight_triage.py             tools/firstlight_coverage.py             scripts/prepare.py             scripts/link_modules.py             scripts/content_profile.py
+      - name: Pure runtime syntax
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Isrc -fsyntax-only             src/runtime_eventflag.c             src/runtime_content.c
+      - name: Bootstrap tools load
+        run: |
+          python tools/firstlight_triage.py --help >/dev/null
+          python tools/firstlight_coverage.py --help >/dev/null
