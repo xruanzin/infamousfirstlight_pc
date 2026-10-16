@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <boost/container/small_vector.hpp>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include "bbport_toggles.h"
 #include "video_core/buffer_cache/buffer.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
@@ -235,12 +238,52 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
     bool needs_flush =
         Transit(dst, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eCopy,
                 vk::AccessFlagBits2::eTransferWrite);
+    if (fl_trace_this) {
+        std::printf("GPU: FL upload #%llu recorded\n",
+                    static_cast<unsigned long long>(fl_seq));
+        std::fflush(stdout);
+    }
+
     for (const auto& copy : upload_copies) {
         const auto copy_size = BufferImageCopySize(copy, dst->info.pixel_format);
         needs_flush |= IsBufferAccessed(src, copy.bufferOffset, copy_size);
     }
     if (needs_flush) {
         FlushBarriers();
+    }
+
+    static const bool fl_upload_trace = [] {
+        const char* value = std::getenv("FL_GPU_UPLOAD_TRACE");
+        return value && value[0] == '1';
+    }();
+    static std::atomic<u64> fl_upload_seq{0};
+    const bool fl_trace_this =
+        fl_upload_trace && (dst->info.props.is_bc_decoded || dst->info.size.height <= 1);
+    u64 fl_seq = 0;
+    if (fl_trace_this) {
+        fl_seq = fl_upload_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+        std::printf(
+            "GPU: FL upload #%llu begin guest=0x%llx format=%s bc=%s size=%ux%ux%u "
+            "host2d=%u decoded=%u regions=%zu\n",
+            static_cast<unsigned long long>(fl_seq),
+            static_cast<unsigned long long>(dst->info.guest_address),
+            vk::to_string(dst->info.pixel_format).c_str(),
+            vk::to_string(dst->info.bc_format).c_str(),
+            dst->info.size.width, dst->info.size.height, dst->info.size.depth,
+            dst->info.props.is_host_2d ? 1u : 0u, dst->info.props.is_bc_decoded ? 1u : 0u,
+            upload_copies.size());
+        for (size_t i = 0; i < upload_copies.size() && i < 4; ++i) {
+            const auto& copy = upload_copies[i];
+            std::printf(
+                "GPU: FL upload #%llu region%zu off=%llu row=%u h=%u mip=%u layer=%u+%u "
+                "extent=%ux%ux%u\n",
+                static_cast<unsigned long long>(fl_seq), i,
+                static_cast<unsigned long long>(copy.bufferOffset), copy.bufferRowLength,
+                copy.bufferImageHeight, copy.imageSubresource.mipLevel,
+                copy.imageSubresource.baseArrayLayer, copy.imageSubresource.layerCount,
+                copy.imageExtent.width, copy.imageExtent.height, copy.imageExtent.depth);
+        }
+        std::fflush(stdout);
     }
 
     if (dst->info.props.is_bc_decoded) {
