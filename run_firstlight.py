@@ -83,7 +83,8 @@ def metadata(game: Path) -> dict:
         fail(f"expected CUSA00575, found {title_id!r}")
     version = values.get("VERSION")
     app_ver = values.get("APP_VER")
-    if version not in (None, "01.00") and app_ver not in (None, "01.00"):
+    reported = [value for value in (version, app_ver) if value is not None]
+    if any(value != "01.00" for value in reported):
         fail(f"bootstrap currently targets v1.00; param.sfo reports VERSION={version!r}, APP_VER={app_ver!r}")
     return values
 
@@ -213,10 +214,30 @@ def main() -> int:
     )
 
     module_args = ["libc.prx", "libSceFios2.prx"]
-    extra = [x.strip() for x in env.get("FL_LINK_MODULES", "").replace(",", ";").split(";") if x.strip()]
-    for name in extra:
-        if name not in module_args:
-            module_args.append(name)
+    # Optional title modules can be linked as native guest code without baking
+    # them into the port.  "auto" asks the selector to add only modules whose
+    # exports satisfy imports that remain after libc/Fios2.
+    requested_modules = env.get("FL_LINK_MODULES", "auto")
+    if requested_modules.strip().lower() == "auto":
+        selection = run_python(
+            PORT / "tools" / "firstlight_modules.py",
+            game,
+            "--json",
+            env=env,
+            capture=True,
+        )
+        try:
+            selected = json.loads(selection.stdout or "{}").get("selected", [])
+        except json.JSONDecodeError as error:
+            fail(f"firstlight_modules.py returned invalid JSON: {error}")
+        for name in selected:
+            if name not in module_args:
+                module_args.append(name)
+    else:
+        extra = [x.strip() for x in requested_modules.replace(",", ";").split(";") if x.strip()]
+        for name in extra:
+            if name not in module_args:
+                module_args.append(name)
     for name in module_args:
         if not (game / "sce_module" / name).is_file():
             fail(f"requested linked module is missing: sce_module/{name}")
@@ -304,7 +325,21 @@ def main() -> int:
             )
         result_code = result.returncode
 
+    diagnosis = user / "last_run_diagnosis.json"
+    diagnose = run_python(
+        PORT / "tools" / "firstlight_log.py",
+        log_path,
+        "--exit-code",
+        result_code,
+        "--out",
+        diagnosis,
+        env=env,
+        capture=True,
+    )
+    if diagnose.stdout:
+        print(diagnose.stdout, end="")
     print(f"First Light exited with code {result_code}; log: {log_path}")
+    print(f"Boot diagnosis: {diagnosis}")
     return result_code
 
 
