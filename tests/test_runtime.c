@@ -29,6 +29,7 @@ typedef void *(ABI *TlsAddress)(const uint64_t *);
 typedef void *(ABI *ThreadSelf)(void);
 typedef int32_t (ABI *ThreadGetAttr)(void *,void **);
 typedef int32_t (ABI *ThreadAffinity)(void **,uint64_t *);
+typedef int32_t (ABI *IntQuery)(void);
 static void *main_identity;
 static void *tls_worker(void *unused) {
     (void)unused;
@@ -354,6 +355,9 @@ static void rw_timeouts(void) {
 int main(int argc,char **argv) {
     runtime_start(0); assert(runtime_resolve("bzQExy189ZI#q#q",0)==0);
     runtime_start(1);
+    assert(GET(IntQuery,"WslcK1FQcGI#g#T")()==0);
+    assert(GET(IntQuery,"rNRtm1uioyY#g#T")()==0);
+    assert(!strcmp(runtime_import_name("WslcK1FQcGI#g#T"),"sceKernelIsNeoMode"));
     assert(runtime_resolve("bzQExy189ZI#wrong#module",0)==0);
     assert(runtime_resolve("unknown",0)==0);
     assert(runtime_resolve("8zTFvBIAIN8#q#q",1)==0);
