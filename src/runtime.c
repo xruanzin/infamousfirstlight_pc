@@ -179,72 +179,92 @@ static ABI __attribute__((noreturn)) void guest_libc_exit(int status) {
     runtime_report();
     exit(status);
 }
-uintptr_t runtime_resolve(const char *name, int is_data) {
-    if (!(capabilities & 1)) return 0;
-    if (is_data) {
-        static int32_t need_libc_internal = 1; /* SDK marker variable referenced by Fios2 */
-        if (!strcmp(name, "f7uOxY9mM1U#p#J")) return (uintptr_t)&stack_canary;
-        if (!strcmp(name, "ZT4ODD2Ts9o#libSceLibcInternal")) return (uintptr_t)&need_libc_internal;
-        return 0;
-    }
-    /* Exact scoped imports for CUSA03173; the suffix identifies library/module. */
-    if (!strcmp(name, "bzQExy189ZI#q#q")) return (uintptr_t)init_env;
-    if (!strcmp(name, "8G2LB+A3rzg#q#q")) return (uintptr_t)guest_atexit;
-    if (!strcmp(name, "tsvEmnenz48#q#q")) return (uintptr_t)guest_cxa_atexit;
-    if (!strcmp(name, "uMei1W9uyNo#q#q")) return (uintptr_t)guest_libc_exit;
-    /* Not imported by the current eboot, exposed for ABI tests/future use. */
-    if (!strcmp(name, "H2e8t5ScQGc#q#q")) return (uintptr_t)guest_finalize;
-    if (!strcmp(name, "3GPpjQdAMTw#q#q")) return (uintptr_t)guard_acquire;
-    if (!strcmp(name, "9rAeANT2tyE#q#q")) return (uintptr_t)guard_release;
-    if (!strcmp(name, "2emaaluWzUw#q#q")) return (uintptr_t)guard_abort;
-    if (!strcmp(name, "Ou3iL1abvng#p#J")) return (uintptr_t)stack_fail;
-    if (!strcmp(name, "8zTFvBIAIN8#q#q")) return (uintptr_t)guest_memset;
-    if (!strcmp(name, "Q3VBxCXhUHs#q#q")) return (uintptr_t)guest_memcpy;
-    if (!strcmp(name, "+P6FRGH4LfA#q#q")) return (uintptr_t)guest_memmove;
-    if (!strcmp(name, "DfivPArhucg#q#q")) return (uintptr_t)guest_memcmp;
-    if (!strcmp(name, "j4ViWNHEgww#q#q")) return (uintptr_t)guest_strlen;
-    if (!strcmp(name, "vNe1w4diLCs#p#J")) return (uintptr_t)guest_tls_get_addr;
-    if (!strcmp(name, "959qrazPIrg#p#J")) return (uintptr_t)guest_procparam;
-    if (!strcmp(name, "p5EcQeEeJAE#p#J")) return (uintptr_t)guest_set_heap_api;
-    uintptr_t mutex = runtime_mutex_resolve(name);
-    if (mutex) return mutex;
-    uintptr_t thread = runtime_thread_resolve(name);
-    if (thread) return thread;
-    uintptr_t content=runtime_content_resolve(name);
-    if (content) return content;
-    uintptr_t timer = runtime_time_resolve(name);
-    if (timer) return timer;
-    uintptr_t sema = runtime_sema_resolve(name);
-    if (sema) return sema;
-    uintptr_t rwlock = runtime_rwlock_resolve(name);
-    if (rwlock) return rwlock;
-    uintptr_t memory = runtime_memory_resolve(name);
-    if (memory) return memory;
-    uintptr_t kernel = runtime_kernel_resolve(name);
-    if (kernel) return kernel;
-    uintptr_t services = runtime_services_resolve(name);
-    if (services) return services;
-    uintptr_t ajm = runtime_ajm_resolve(name);
-    if (ajm) return ajm;
-    uintptr_t audio = runtime_audio_resolve(name);
-    if (audio) return audio;
-    uintptr_t pad = runtime_pad_resolve(name);
-    if (pad) return pad;
-    uintptr_t rtc = runtime_rtc_resolve(name);
-    if (rtc) return rtc;
-    uintptr_t save = runtime_savedata_resolve(name);
-    if (save) return save;
-    uintptr_t file = runtime_file_resolve(name);
-    if (file) return file;
-    return bbgpu_resolve(name);
-}
 static const struct { const char *nid, *symbol; } import_names[]={
 #include "import_names.inc"
 };
+
+/* Orbis symbol suffixes encode dump-local library/module IDs.  The NID before
+ * the first '#' is stable across titles, while those suffixes are not. */
+static int same_nid(const char *a,const char *b) {
+    const char *as=strchr(a,'#'), *bs=strchr(b,'#');
+    size_t an=as ? (size_t)(as-a) : strlen(a);
+    size_t bn=bs ? (size_t)(bs-b) : strlen(b);
+    return an==bn && !memcmp(a,b,an);
+}
+static const char *canonical_import_nid(const char *name) {
+    for (size_t i=0;i<sizeof(import_names)/sizeof(*import_names);++i)
+        if (!strcmp(name,import_names[i].nid)) return import_names[i].nid;
+    for (size_t i=0;i<sizeof(import_names)/sizeof(*import_names);++i)
+        if (same_nid(name,import_names[i].nid)) return import_names[i].nid;
+    return name;
+}
+
+uintptr_t runtime_resolve(const char *name, int is_data) {
+    if (!(capabilities & 1)) return 0;
+    const char *canonical=canonical_import_nid(name);
+    if (is_data) {
+        static int32_t need_libc_internal = 1; /* SDK marker variable referenced by Fios2 */
+        if (same_nid(name, "f7uOxY9mM1U")) return (uintptr_t)&stack_canary;
+        if (same_nid(name, "ZT4ODD2Ts9o")) return (uintptr_t)&need_libc_internal;
+        return 0;
+    }
+    /* Runtime-owned libc contracts are keyed by stable NID, not dump-local suffix. */
+    if (same_nid(name, "bzQExy189ZI")) return (uintptr_t)init_env;
+    if (same_nid(name, "8G2LB+A3rzg")) return (uintptr_t)guest_atexit;
+    if (same_nid(name, "tsvEmnenz48")) return (uintptr_t)guest_cxa_atexit;
+    if (same_nid(name, "uMei1W9uyNo")) return (uintptr_t)guest_libc_exit;
+    /* Not imported by the current eboot, exposed for ABI tests/future use. */
+    if (same_nid(name, "H2e8t5ScQGc")) return (uintptr_t)guest_finalize;
+    if (same_nid(name, "3GPpjQdAMTw")) return (uintptr_t)guard_acquire;
+    if (same_nid(name, "9rAeANT2tyE")) return (uintptr_t)guard_release;
+    if (same_nid(name, "2emaaluWzUw")) return (uintptr_t)guard_abort;
+    if (same_nid(name, "Ou3iL1abvng")) return (uintptr_t)stack_fail;
+    if (same_nid(name, "8zTFvBIAIN8")) return (uintptr_t)guest_memset;
+    if (same_nid(name, "Q3VBxCXhUHs")) return (uintptr_t)guest_memcpy;
+    if (same_nid(name, "+P6FRGH4LfA")) return (uintptr_t)guest_memmove;
+    if (same_nid(name, "DfivPArhucg")) return (uintptr_t)guest_memcmp;
+    if (same_nid(name, "j4ViWNHEgww")) return (uintptr_t)guest_strlen;
+    if (same_nid(name, "vNe1w4diLCs")) return (uintptr_t)guest_tls_get_addr;
+    if (same_nid(name, "959qrazPIrg")) return (uintptr_t)guest_procparam;
+    if (same_nid(name, "p5EcQeEeJAE")) return (uintptr_t)guest_set_heap_api;
+    uintptr_t mutex = runtime_mutex_resolve(canonical);
+    if (mutex) return mutex;
+    uintptr_t thread = runtime_thread_resolve(canonical);
+    if (thread) return thread;
+    uintptr_t content=runtime_content_resolve(canonical);
+    if (content) return content;
+    uintptr_t timer = runtime_time_resolve(canonical);
+    if (timer) return timer;
+    uintptr_t sema = runtime_sema_resolve(canonical);
+    if (sema) return sema;
+    uintptr_t rwlock = runtime_rwlock_resolve(canonical);
+    if (rwlock) return rwlock;
+    uintptr_t memory = runtime_memory_resolve(canonical);
+    if (memory) return memory;
+    uintptr_t kernel = runtime_kernel_resolve(canonical);
+    if (kernel) return kernel;
+    uintptr_t services = runtime_services_resolve(canonical);
+    if (services) return services;
+    uintptr_t ajm = runtime_ajm_resolve(canonical);
+    if (ajm) return ajm;
+    uintptr_t audio = runtime_audio_resolve(canonical);
+    if (audio) return audio;
+    uintptr_t pad = runtime_pad_resolve(canonical);
+    if (pad) return pad;
+    uintptr_t rtc = runtime_rtc_resolve(canonical);
+    if (rtc) return rtc;
+    uintptr_t save = runtime_savedata_resolve(canonical);
+    if (save) return save;
+    uintptr_t file = runtime_file_resolve(canonical);
+    if (file) return file;
+    return bbgpu_resolve(canonical);
+}
 /* Symbol name for a scoped NID, or NULL when this eboot/libc never imports it. */
 const char *runtime_symbol(const char *nid) {
     for (size_t i=0;i<sizeof(import_names)/sizeof(*import_names);++i)
         if (!strcmp(nid,import_names[i].nid)) return import_names[i].symbol;
+    for (size_t i=0;i<sizeof(import_names)/sizeof(*import_names);++i)
+        if (same_nid(nid,import_names[i].nid)) return import_names[i].symbol;
     return NULL;
 }
 /* Same symbol name means same contract whether imported from libkernel or
