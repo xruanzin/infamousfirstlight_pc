@@ -750,6 +750,7 @@
 {"ioKMruft1ek#libSceDiscMap","sceDiscMap_8A828CAEE7EDD5E9"},
 
 /* CUSA00575 / First Light bootstrap names, verified against current shadPS4. */
+{"NWtTN10cJzE","sceLibcHeapGetTraceInfo"},
 {"Idffwf3yh8s","sceGnmDrawInitDefaultHardwareState"},
 {"0O3xxFaiObw","sceGnmSetSpiEnableSqCounters"},
 {"lN7Gk-p9u78","sceGnmSetSpiEnableSqCountersForUnitInstance"},
