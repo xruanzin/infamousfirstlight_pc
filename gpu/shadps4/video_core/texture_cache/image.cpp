@@ -445,7 +445,7 @@ void Image::GetBarriers(Barriers& barriers, vk::ImageLayout dst_layout, vk::Acce
 
     if (needs_partial_transition || partially_transited) {
         if (!partially_transited) {
-            subresource_states.resize(info.resources.levels * info.resources.layers);
+            subresource_states.resize(info.resources.levels * info.HostLayers());
             std::fill(subresource_states.begin(), subresource_states.end(), last_state);
         }
 
@@ -461,13 +461,13 @@ void Image::GetBarriers(Barriers& barriers, vk::ImageLayout dst_layout, vk::Acce
             needs_partial_transition
                 ? std::ranges::views::iota(subres_range->base.layer,
                                            subres_range->base.layer + subres_range->extent.layers)
-                : std::views::iota(0u, info.resources.layers);
+                : std::views::iota(0u, info.HostLayers());
 
         for (u32 mip : mips) {
             for (u32 layer : layers) {
                 // NOTE: these loops may produce a lot of small barriers.
                 // If this becomes a problem, we can optimize it by merging adjacent barriers.
-                const auto subres_idx = mip * info.resources.layers + layer;
+                const auto subres_idx = mip * info.HostLayers() + layer;
                 ASSERT(subres_idx < subresource_states.size());
                 auto& state = subresource_states[subres_idx];
 
