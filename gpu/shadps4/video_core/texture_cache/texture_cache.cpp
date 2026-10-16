@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <xxhash.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "bbport_process_memory.h"
 #include "bbport_toggles.h"
