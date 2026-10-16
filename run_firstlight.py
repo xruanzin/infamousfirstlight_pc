@@ -123,6 +123,21 @@ def main() -> int:
     if missing:
         fail("missing required plaintext game file(s): " + ", ".join(missing))
 
+    # First Light streams most world data from art/cache/psarc and uses
+    # playgo.pgm during install/content setup.  Accept both common dump layouts:
+    # directly under app0 or nested under dvdroot_ps4 (runtime_file bridges it).
+    def payload(name: str) -> Path | None:
+        direct = game / name
+        nested = game / "dvdroot_ps4" / name
+        return direct if direct.exists() else nested if nested.exists() else None
+
+    art_root = payload("art")
+    playgo = payload("playgo.pgm")
+    if not art_root:
+        print("WARNING: no art/ payload found (also checked dvdroot_ps4/art); boot may reach the engine but cannot load world data.")
+    if not playgo:
+        print("WARNING: no playgo.pgm found (also checked dvdroot_ps4/playgo.pgm); PlayGo will use the fallback installed profile.")
+
     out = Path(env.get("FL_OUT_DIR", PORT / "out")).resolve()
     user = Path(env.get("FL_USER_DIR", PORT / "user")).resolve()
     out.mkdir(parents=True, exist_ok=True)
