@@ -7,7 +7,10 @@
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "video_core/amdgpu/tiling.h"
 #include "video_core/renderer_vulkan/vk_common.h"
+#include "video_core/texture_cache/bc_decode.h"
 #include "video_core/texture_cache/types.h"
+
+#include <optional>
 
 namespace AmdGpu {
 struct ColorBuffer;
@@ -33,6 +36,8 @@ struct ImageProperties {
     u32 is_block : 1;
     u32 is_depth : 1;
     u32 has_stencil : 1;
+    // Host image contains CPU-decoded texels while guest memory remains BC-compressed.
+    u32 is_bc_decoded : 1;
 };
 
 struct ImageInfo {
@@ -67,6 +72,7 @@ struct ImageInfo {
 
     ImageProperties props{};
     vk::Format pixel_format = vk::Format::eUndefined;
+    vk::Format bc_format = vk::Format::eUndefined;
     AmdGpu::ImageType type;
     SubresourceExtent resources;
     Extent3D size{1, 1, 1};
@@ -90,5 +96,11 @@ struct ImageInfo {
     VAddr stencil_addr{};
     u32 stencil_size{};
 };
+
+/// Plain host format used when BC1-BC5 is decoded before upload.
+vk::Format BcTinyDecodedFormat(vk::Format format) noexcept;
+
+/// Decoder corresponding to a guest BC format.
+std::optional<BcDecode::Kind> BcTinyDecodeKind(vk::Format format) noexcept;
 
 } // namespace VideoCore
