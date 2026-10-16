@@ -509,6 +509,10 @@ ImageId TextureCache::ExpandImage(const ImageInfo& info, ImageId image_id) {
 }
 
 ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
+    // Decide the host representation before cache lookup/registration. This keeps cache keys,
+    // image creation, views and uploads consistent when a guest BC1-BC5 1D texture must fall
+    // back to decoded host texels.
+    ApplyBc1DCapabilityFallback(instance, desc.info);
     const auto& info = desc.info;
     ASSERT(info.guest_address != 0);
 
