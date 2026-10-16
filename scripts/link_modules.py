@@ -99,6 +99,16 @@ def patch_fs_loads(image, ph, base):
             patched += 1
     return patched
 
+def remaining_fs_loads(image, segments):
+    """Return guest FS:[0] thread-pointer loads left in executable segments."""
+    left = []
+    for start, size, flags in segments:
+        if not flags & 1 or size < 9:
+            continue
+        for match in FS_LOAD_ANY.finditer(image, start, start + size):
+            left.append(match.start())
+    return left
+
 
 def red_zones_enabled():
     """Windows only (Linux signal frames skip the red zone); BB_RED_ZONE=0/1 overrides."""
@@ -298,6 +308,12 @@ def link(game, out, module_names=DEFAULT_MODULES):
     untranslated = bytes(image)
     image, segments, cpu_compat = patch_image(image, segments, main, table, relocs)
     cpu_compat['libc'] = libc_changes
+    # A Windows launch cannot safely execute a PS4 FS:[0] TCB load.  Catch a
+    # missed register encoding here, before publishing boot-linked.bin.
+    fs_left = remaining_fs_loads(image, segments)
+    if fs_left:
+        sample=', '.join(hex(x) for x in fs_left[:8])
+        raise ValueError(f'untranslated guest FS:[0] loads remain: {len(fs_left)} ({sample})')
     red_zone = protect_image(image, segments, untranslated, relocs)
     with atomic_output(out / 'boot-linked.bin') as f:
         f.write(struct.pack('<8s6Q', b'BBPROBE5', len(image), entry, len(segments), len(relocs), len(names), flags))
