@@ -748,8 +748,11 @@
 {"XD3mDeybCnk#p#J","scePthreadRwlockTryrdlock"},
 {"eXbUSpEaTsA#p#J","scePthreadAttrSetinheritsched"},
 {"ZT4ODD2Ts9o#libSceLibcInternal","Need_sceLibcInternal"},
+{"fl1eoDnwQ4s#libSceDiscMap","sceDiscMapGetPackageSize"},
 {"lbQKqsERhtE#libSceDiscMap","sceDiscMapIsRequestOnHDD"},
+{"fJgP+wqifno#libSceDiscMap","sceDiscMap_7C980FFB0AA27E7A"},
 {"ioKMruft1ek#libSceDiscMap","sceDiscMap_8A828CAEE7EDD5E9"},
+{"5+vOlukvkfg#libSceDiscMap","sceDiscMap_E7EBCE96E92F91F8"},
 
 /* CUSA00575 / First Light bootstrap names, verified against current shadPS4. */
 {"NWtTN10cJzE","sceLibcHeapGetTraceInfo"},
