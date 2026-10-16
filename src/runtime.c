@@ -33,6 +33,34 @@ static ABI void guest_set_heap_api(void **api) {
     puts("Runtime: application heap API registered");
 }
 void **runtime_application_heap_api(void) { return application_heap_api; }
+
+/* libSceLibcInternalExt::sceLibcHeapGetTraceInfo.
+ * The PS4 libc allocator asks the runtime for persistent process-wide bookkeeping storage.
+ * Both current shadPS4 and Kyty use this exact 32-byte ABI:
+ *   u64 size; u32 flag; u32 getSegmentInfo; u64 *atomicMask; u64 *mstateTable.
+ * The guest allocator reads and writes the returned storage, so this cannot be a success stub. */
+typedef struct {
+    uint64_t size;
+    uint32_t flag;
+    uint32_t get_segment_info;
+    uint64_t *mspace_atomic_id_mask;
+    uint64_t *mstate_table;
+} GuestLibcHeapTraceInfo;
+_Static_assert(sizeof(GuestLibcHeapTraceInfo)==32,"PS4 heap trace ABI layout changed");
+static uint64_t libc_heap_atomic_id_mask;
+static uint64_t libc_heap_mstate_table[64];
+
+static ABI void guest_libc_heap_get_trace_info(GuestLibcHeapTraceInfo *info) {
+    if (!info || info->size!=sizeof(*info)) {
+        fprintf(stderr,"STOP: sceLibcHeapGetTraceInfo invalid info=%p size=%" PRIu64 " (expected %zu)\n",
+                (void *)info,info ? info->size : 0,sizeof(*info));
+        exit(21);
+    }
+    info->get_segment_info=0;
+    info->mspace_atomic_id_mask=&libc_heap_atomic_id_mask;
+    info->mstate_table=libc_heap_mstate_table;
+    puts("Runtime: libc heap trace storage registered");
+}
 void runtime_set_module_tls(uint64_t module, const void *data, uint64_t filesz, uint64_t memsz) {
     if (module<2 || module>=TLS_MODULES) { fputs("STOP: unsupported TLS module id\n",stderr); exit(21); }
     tls_modules[module].data=data; tls_modules[module].filesz=filesz; tls_modules[module].memsz=memsz;
@@ -228,6 +256,7 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
     if (same_nid(name, "vNe1w4diLCs")) return (uintptr_t)guest_tls_get_addr;
     if (same_nid(name, "959qrazPIrg")) return (uintptr_t)guest_procparam;
     if (same_nid(name, "p5EcQeEeJAE")) return (uintptr_t)guest_set_heap_api;
+    if (same_nid(name, "NWtTN10cJzE")) return (uintptr_t)guest_libc_heap_get_trace_info;
     uintptr_t mutex = runtime_mutex_resolve(canonical);
     if (mutex) return mutex;
     uintptr_t thread = runtime_thread_resolve(canonical);
