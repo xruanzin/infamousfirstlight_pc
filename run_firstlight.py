@@ -242,14 +242,17 @@ def main() -> int:
         if not (game / "sce_module" / name).is_file():
             fail(f"requested linked module is missing: sce_module/{name}")
     run_tool("link_modules.py", game, "--out", out, "--modules", *module_args, env=env)
-    run_python(
-        PORT / "tools" / "firstlight_coverage.py",
-        "--link",
-        out / "link.json",
-        "--out",
-        out / "firstlight-coverage.json",
-        env=env,
-    )
+    if getattr(sys, "frozen", False):
+        print("Import source-coverage audit skipped in portable build (runtime resolution remains authoritative).")
+    else:
+        run_python(
+            PORT / "tools" / "firstlight_coverage.py",
+            "--link",
+            out / "link.json",
+            "--out",
+            out / "firstlight-coverage.json",
+            env=env,
+        )
     run_tool("content_profile.py", game, "--out", out, "--sku", env["BB_CONTENT_SKU"], env=env)
     bootstrap_summary(out, values)
 
