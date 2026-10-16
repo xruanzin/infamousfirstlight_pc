@@ -125,7 +125,8 @@ bool ApplyBc1DCapabilityFallback(const Vulkan::Instance& instance, ImageInfo& in
         return !value || value[0] != '0';
     }();
     if (!enabled || info.props.is_bc_decoded || !info.props.is_block || info.props.is_depth ||
-        info.props.is_volume || info.num_samples != 1 || info.type != AmdGpu::ImageType::Color1D) {
+        info.props.is_volume || info.num_samples != 1 || info.type != AmdGpu::ImageType::Color1D ||
+        AmdGpu::IsMacroTiled(info.array_mode)) {
         return false;
     }
 
