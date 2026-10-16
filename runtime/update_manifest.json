@@ -21,6 +21,12 @@
       "required": false,
       "kind": "native",
       "sha256": "0d334972db987f5c799a98bd5c10ff6de9af9d5144c3abad206d978aaadacff8"
+    },
+    {
+      "path": "FirstLightLauncher-next.exe",
+      "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-launcher/FirstLightLauncher-next.exe",
+      "required": false,
+      "kind": "launcher"
     }
   ]
 }
