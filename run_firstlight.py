@@ -182,6 +182,16 @@ def main() -> int:
         "BB_SHADNET_PASSWORD", "BB_SHADNET_TOKEN",
     ):
         env.pop(key, None)
+    # Development hotfix layer: these files live beside the launcher and are read on every boot.
+    # NID aliases therefore change without rebuilding the native loader, while simple native ABI
+    # overrides can be shipped as runtime\firstlight_runtime.dll.
+    env["FL_IMPORT_ALIASES"] = str(PORT / "runtime" / "import_aliases.tsv")
+    module = PORT / "runtime" / "firstlight_runtime.dll"
+    if module.is_file():
+        env["FL_RUNTIME_MODULE"] = str(module)
+    else:
+        env.pop("FL_RUNTIME_MODULE", None)
+
     env.update(
         BB_GAME_DIR=str(game),
         BB_USER_DIR=str(user),
