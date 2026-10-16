@@ -193,6 +193,12 @@ def main() -> int:
     env.setdefault("BB_VBLANK_HZ", "60")
     env.setdefault("BB_FPS", "30")
     env.setdefault("BB_CONTENT_SKU", "full")
+
+    # First Light stability profile. The AMD Windows driver has repeatedly faulted while
+    # vkCmdCopyBufferToImage is being recorded. Keep the Vulkan recorder single-threaded for
+    # CUSA00575 until that path is proven safe; FL_VK_RECORD_THREAD=1 re-enables it for A/B.
+    env["BB_VK_RECORD_THREAD"] = env.get("FL_VK_RECORD_THREAD", "0")
+    env.setdefault("FL_GPU_UPLOAD_TRACE", "1")
     if args.import_trace is not None:
         if args.import_trace < 0:
             fail("--import-trace must be zero or greater")
@@ -297,7 +303,9 @@ def main() -> int:
     log_path = user / "last_run.log"
     header = (
         f"inFAMOUS First Light native bootstrap\n"
+        f"compat_revision=amd-copy-isolation-v1\n"
         f"title_id=CUSA00575 version=01.00\n"
+        f"vk_record_thread={env.get('BB_VK_RECORD_THREAD')} upload_trace={env.get('FL_GPU_UPLOAD_TRACE')}\n"
         f"game={game}\n"
         f"probe={probe}\n"
         f"started={time.strftime('%Y-%m-%d %H:%M:%S')}\n"
