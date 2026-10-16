@@ -125,7 +125,12 @@ ImageInfo::ImageInfo(const AmdGpu::Image& image, const Shader::ImageResource& de
         props.is_depth = true;
     }
     type = image.GetBaseType();
-    props.is_host_2d = image.IsDecodedBc1DHost2D();
+    props.is_host_2d = image.IsHost1DAs2D();
+    if (AmdGpu::All1DAs2D() && props.is_host_2d && type == AmdGpu::ImageType::Color1D) {
+        // Match First Light's LUT aliasing: guest treats it as 1D, host cache treats the
+        // same height-one allocation as the 2D render target that produced it.
+        type = AmdGpu::ImageType::Color2D;
+    }
     props.is_tiled = image.IsTiled();
     props.is_volume = type == AmdGpu::ImageType::Color3D;
     props.is_pow2 = image.pow2pad;
