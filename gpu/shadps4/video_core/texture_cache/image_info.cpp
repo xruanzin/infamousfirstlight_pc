@@ -151,7 +151,9 @@ ImageInfo::ImageInfo(const AmdGpu::Image& image, const Shader::ImageResource& de
         const char* value = std::getenv("FL_CUBE_ARRAY_EXACT_LAYERS");
         return value && value[0] == '1';
     }();
-    if (fl_cube_exact_layers && image.IsCube() && image.pow2pad) {
+    const bool is_bc6h = pixel_format == vk::Format::eBc6HUfloatBlock ||
+                         pixel_format == vk::Format::eBc6HSfloatBlock;
+    if (fl_cube_exact_layers && image.IsCube() && image.pow2pad && is_bc6h) {
         const u32 exact_layers = (static_cast<u32>(image.depth) + 1u) * 6u;
         if (exact_layers != 0 && exact_layers < resources.layers) {
             host_layers = exact_layers;
