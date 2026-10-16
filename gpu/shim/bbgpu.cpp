@@ -191,6 +191,7 @@ std::thread g_window_thread;
 std::mutex g_window_mutex;
 std::condition_variable g_window_cv;
 bool g_window_ready;
+bool g_allow_bloodborne_hooks;
 } // namespace
 
 u32 BbDisplayRefreshHz() {
@@ -228,6 +229,17 @@ extern "C" int bbgpu_init(const BbGpuConfig* config) {
     StartProfileWriter();
 #endif
     g_sdk_version = config->sdk_version;
+    const char* serial = config->serial ? config->serial : "";
+    static const char* const bloodborne_ids[] = {
+        "CUSA00207","CUSA00208","CUSA00299","CUSA00900","CUSA01363",
+        "CUSA03014","CUSA03023","CUSA03173","CUSA03179"
+    };
+    g_allow_bloodborne_hooks = false;
+    for (const char* id : bloodborne_ids)
+        if (!std::strcmp(serial,id)) { g_allow_bloodborne_hooks=true; break; }
+    if (!g_allow_bloodborne_hooks)
+        std::printf("GPU: title %s uses generic renderer path; Bloodborne memory hooks disabled\n",
+                    *serial ? serial : "(unknown)");
 #ifdef _WIN32
     if (config->user_dir && !std::getenv("BB_GPU_USER_DIR")) _putenv_s("BB_GPU_USER_DIR", config->user_dir);
 #else
@@ -390,5 +402,5 @@ extern "C" int bbgpu_input_reload_requested(void) {
 }
 
 extern "C" void bbgpu_mouse_camera_configure(int direct, float sensitivity) {
-    Core::BloodborneCam::Instance().Configure(direct != 0, sensitivity);
+    Core::BloodborneCam::Instance().Configure(g_allow_bloodborne_hooks && direct != 0, sensitivity);
 }
