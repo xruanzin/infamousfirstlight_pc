@@ -49,6 +49,9 @@ public:
     /// Read-only bindings up to this size are copied into a stream buffer (bbport: public for
     /// the draw pipeline's constant ring).
     static constexpr u64 STREAM_THRESHOLD = 16_KB;
+    /// First Light / Second Son can upload multi-gigabyte guest ranges while loading a world.
+    /// Keep staging allocations bounded and stream larger uploads in pieces.
+    static constexpr u64 MAX_UPLOAD_PART_BYTES = 256_MB;
 
     explicit BufferCache(const Vulkan::Instance& instance, Vulkan::Scheduler& scheduler,
                          Vulkan::Runtime& runtime, AmdGpu::Liverpool* liverpool,
@@ -141,6 +144,7 @@ private:
 
     const Buffer* UploadCopies(const Buffer* arena, std::span<vk::BufferCopy> copies,
                                size_t total_size_bytes);
+    void UploadInParts(const Buffer* arena, std::span<const vk::BufferCopy> ranges);
 
     bool SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size);
 
