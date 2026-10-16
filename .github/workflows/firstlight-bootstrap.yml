@@ -11,6 +11,8 @@ on:
       - "runtime/**"
       - "src/hotfix/**"
       - ".github/workflows/firstlight-hotfix.yml"
+      - ".github/workflows/firstlight-launcher.yml"
+      - "launcher_firstlight.py"
   pull_request:
     branches: [windows]
 
