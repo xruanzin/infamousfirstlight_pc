@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdio>
+#include <cstdlib>
 #include "common/logging/log.h"
 #include "shader_recompiler/resource.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
@@ -11,6 +13,14 @@
 #include <magic_enum/magic_enum.hpp>
 
 namespace VideoCore {
+
+static bool FlGpuViewTrace() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("FL_GPU_RESOURCE_TRACE");
+        return value && value[0] == '1';
+    }();
+    return enabled;
+}
 
 vk::ImageViewType ConvertImageViewType(AmdGpu::ImageType type) {
     switch (type) {
@@ -174,7 +184,25 @@ ImageView::ImageView(const Vulkan::Instance& instance, const ImageViewInfo& info
                   magic_enum::enum_name(info.type), magic_enum::enum_name(image.info.type));
     }
 
+    if (FlGpuViewTrace()) {
+        std::printf("GPU: FL resource view-create begin image#%llu guest=0x%llx guestType=%u viewType=%u format=%s baseMip=%u levels=%u baseLayer=%u layers=%u decoded=%u\\n",
+                    static_cast<unsigned long long>(image.image_uid),
+                    static_cast<unsigned long long>(image.info.guest_address), u32(image.info.type),
+                    u32(image_view_ci.viewType), vk::to_string(image_view_ci.format).c_str(),
+                    image_view_ci.subresourceRange.baseMipLevel,
+                    image_view_ci.subresourceRange.levelCount,
+                    image_view_ci.subresourceRange.baseArrayLayer,
+                    image_view_ci.subresourceRange.layerCount,
+                    image.info.props.is_bc_decoded ? 1u : 0u);
+        std::fflush(stdout);
+    }
     auto [view_result, view] = instance.GetDevice().createImageViewUnique(image_view_ci);
+    if (FlGpuViewTrace()) {
+        std::printf("GPU: FL resource view-create end image#%llu result=%s\\n",
+                    static_cast<unsigned long long>(image.image_uid),
+                    vk::to_string(view_result).c_str());
+        std::fflush(stdout);
+    }
     ASSERT_MSG(view_result == vk::Result::eSuccess, "Failed to create image view: {}",
                vk::to_string(view_result));
     image_view = std::move(view);
