@@ -30,6 +30,17 @@ if (-not $IconPath -and $env:FL_GAME_DIR) {
     $Candidate = Join-Path $env:FL_GAME_DIR "sce_sys\icon0.png"
     if (Test-Path $Candidate) { $IconPath = $Candidate }
 }
+# CI does not have access to the user's game directory. Use the compact launcher-only derivative
+# supplied for this project so the portable FirstLightBootstrap.exe still carries First Light art.
+if (-not $IconPath) {
+    $EmbeddedB64 = Join-Path $Root "packaging\windows\firstlight_icon.jpg.b64"
+    if (Test-Path $EmbeddedB64) {
+        $EmbeddedJpg = Join-Path $Root "out\firstlight-icon-source.jpg"
+        $Bytes = [Convert]::FromBase64String((Get-Content $EmbeddedB64 -Raw).Trim())
+        [IO.File]::WriteAllBytes($EmbeddedJpg, $Bytes)
+        $IconPath = $EmbeddedJpg
+    }
+}
 $IconIco = ""
 if ($IconPath) {
     $IconPath = [IO.Path]::GetFullPath($IconPath)
