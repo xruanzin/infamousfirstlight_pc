@@ -1,6 +1,7 @@
 /* Offline AppContent provider for the configured base-game profile.
  * No package/DLC mounting, downloads, entitlement or license emulation; add-on folders in
  * <user>/addcont/<title id> and BB_DLC_DIR are reported as installed (see addon_list). */
+#define _GNU_SOURCE
 #include "runtime.h"
 #include <dirent.h>
 #include <stdio.h>
