@@ -703,6 +703,8 @@
 {"n88vx3C5nW8#p#J","gettimeofday"},
 {"VADc3MNQ3cM#p#J","signal"},
 {"959qrazPIrg#p#J","sceKernelGetProcParam"},
+{"WslcK1FQcGI","sceKernelIsNeoMode"},
+{"rNRtm1uioyY","sceKernelHasNeoMode"},
 {"p5EcQeEeJAE#p#J","_sceKernelRtldSetApplicationHeapAPI"},
 {"Wl2o5hOVZdw#p#J","sceKernelPrintBacktraceWithModuleInfo"},
 {"mL8NDH86iQI#p#J","sceKernelMapNamedFlexibleMemory"},
