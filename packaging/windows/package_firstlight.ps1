@@ -118,11 +118,16 @@ New-Item -ItemType Directory -Force (Join-Path $OutputRoot "scripts") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "tools") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "patches") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "src") | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $OutputRoot "runtime") | Out-Null
 
 Copy-Item (Join-Path $PyDist "FirstLightBootstrap\*") $OutputRoot -Recurse -Force
 Copy-Item (Join-Path $LauncherDist "FirstLightLauncher.exe") (Join-Path $OutputRoot "FirstLightLauncher.exe") -Force
 
 Copy-Item (Join-Path $Root "out\bb-probe.exe") (Join-Path $OutputRoot "bin\") -Force
+if (Test-Path (Join-Path $Root "out\firstlight_runtime.dll")) {
+    Copy-Item (Join-Path $Root "out\firstlight_runtime.dll") (Join-Path $OutputRoot "runtime\firstlight_runtime.dll") -Force
+}
+Copy-Item (Join-Path $Root "runtime\import_aliases.tsv") (Join-Path $OutputRoot "runtime\import_aliases.tsv") -Force
 Copy-Item (Join-Path $Root "out\bb-gpu-capabilities.exe") (Join-Path $OutputRoot "bin\") -Force
 if (Test-Path (Join-Path $Root "out\bb-play.exe")) {
     Copy-Item (Join-Path $Root "out\bb-play.exe") (Join-Path $OutputRoot "bin\") -Force
