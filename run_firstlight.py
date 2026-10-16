@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Native Windows bootstrap runner for inFAMOUS First Light (CUSA00575 v1.00).
+"""Native Windows bootstrap runner for inFAMOUS First Light (CUSA00575).
 
 This is intentionally separate from run.py: that file still contains Bloodborne
 1.09 patches, mods and online setup.  First Light starts from the generic native
@@ -84,8 +84,12 @@ def metadata(game: Path) -> dict:
     version = values.get("VERSION")
     app_ver = values.get("APP_VER")
     reported = [value for value in (version, app_ver) if value is not None]
-    if any(value != "01.00" for value in reported):
-        fail(f"bootstrap currently targets v1.00; param.sfo reports VERSION={version!r}, APP_VER={app_ver!r}")
+    supported = {"01.00", "01.04"}
+    bad = [value for value in reported if value not in supported]
+    if bad:
+        fail(f"bootstrap supports CUSA00575 v1.00/v1.04; param.sfo reports VERSION={version!r}, APP_VER={app_ver!r}")
+    # VERSION and APP_VER can differ in some dumps; retain both in logs/reports rather than
+    # silently pretending the executable is the base revision.
     return values
 
 
@@ -186,7 +190,7 @@ def main() -> int:
         BB_UPSCALER=env.get("FL_UPSCALER", "off"),
         BB_ONLINE="0",
         BB_SOUND_HACK="0",
-        BB_RED_ZONE="0",
+        BB_RED_ZONE=env.get("FL_RED_ZONE", "0"),
         BB_FORCE_PATCHES="",
         BB_PATCHES="",
     )
@@ -219,7 +223,7 @@ def main() -> int:
         if clang64.is_dir():
             env["PATH"] = f"{clang64}{os.pathsep}{env.get('PATH', '')}"
 
-    print(f"{values.get('TITLE')} | CUSA00575 | v1.00")
+    print(f"{values.get('TITLE')} | CUSA00575 | VERSION={values.get('VERSION')} APP_VER={values.get('APP_VER')}")
     print(f"Game: {game}")
     print(f"Output: {out}")
     print(f"User/logs: {user}")
@@ -308,8 +312,8 @@ def main() -> int:
     header = (
         f"inFAMOUS First Light native bootstrap\n"
         f"compat_revision=amd-copy-isolation-v2-all1d2d\n"
-        f"title_id=CUSA00575 version=01.00\n"
-        f"vk_record_thread={env.get('BB_VK_RECORD_THREAD')} upload_trace={env.get('FL_GPU_UPLOAD_TRACE')} all_1d_as_2d={env.get('FL_ALL_1D_AS_2D')}\n"
+        f"title_id=CUSA00575 version={values.get('VERSION')} app_ver={values.get('APP_VER')}\n"
+        f"vk_record_thread={env.get('BB_VK_RECORD_THREAD')} upload_trace={env.get('FL_GPU_UPLOAD_TRACE')} all_1d_as_2d={env.get('FL_ALL_1D_AS_2D')} redzone={env.get('BB_RED_ZONE')}\n"
         f"game={game}\n"
         f"probe={probe}\n"
         f"started={time.strftime('%Y-%m-%d %H:%M:%S')}\n"
