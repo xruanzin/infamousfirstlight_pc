@@ -207,6 +207,18 @@ static ABI int32_t netctl_nat(uint32_t *info) {
 }
 static ABI int32_t lib_init_id(void) { return new_id(); }
 static ABI int32_t ok_void(void) { return 0; }
+/* Fios2 asks libSceDiscMap whether file ranges have disc-placement bitmap data.
+ * A decrypted folder has no such bitmap; shadPS4 returns this documented error. */
+#define DISC_MAP_NO_BITMAP ((int32_t)0x81100004)
+static ABI int32_t disc_map_hdd(char *path,int64_t offset,int64_t bytes,int32_t *result) {
+    (void)path; (void)offset; (void)bytes; (void)result;
+    return DISC_MAP_NO_BITMAP;
+}
+static ABI int32_t disc_map_bitmap(char *path,int64_t offset,int64_t bytes,
+                                   int32_t *flags,int32_t *ret1,int32_t *ret2) {
+    (void)path; (void)offset; (void)bytes; (void)flags; (void)ret1; (void)ret2;
+    return DISC_MAP_NO_BITMAP;
+}
 static ABI int32_t http_fail(void) { return HTTP_NETWORK; }
 static ABI int32_t http_headers(int32_t request,char **headers,uint64_t *size) {
     (void)request;
@@ -542,6 +554,8 @@ static ABI int32_t audio_in_open(void) { return AUDIO_IN_NOT_OPENED; }
 
 
 static const RuntimeExport exports[]={
+    {"sceDiscMapIsRequestOnHDD",disc_map_hdd},
+    {"Func_8A828CAEE7EDD5E9",disc_map_bitmap},
     {"sceUserServiceInitialize",user_initialize}, {"sceUserServiceTerminate",user_terminate},
     {"sceUserServiceGetInitialUser",user_initial}, {"sceUserServiceGetLoginUserIdList",user_list},
     {"sceUserServiceGetUserName",user_name}, {"sceUserServiceGetEvent",user_event},
