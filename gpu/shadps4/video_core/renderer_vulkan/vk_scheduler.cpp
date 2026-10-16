@@ -59,7 +59,9 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
     if (is_rendering && render_state == new_state) {
         return;
     }
+    fl_trace("end-rendering begin");
     EndRendering();
+    fl_trace("end-rendering end");
     is_rendering = true;
     render_state = new_state;
 
@@ -400,6 +402,21 @@ void Scheduler::AllocateWorkerCommandBuffers() {
 void Scheduler::SubmitExecution(SubmitInfo& info) {
     std::scoped_lock lk{submit_mutex};
     const u64 signal_value = work_semaphore.NextTick();
+    static const bool fl_submit_trace = [] {
+        const char* value = std::getenv("FL_GPU_SUBMIT_TRACE");
+        return value && value[0] == '1';
+    }();
+    static std::atomic<u64> fl_submit_seq{0};
+    const u64 fl_submit_id =
+        fl_submit_trace ? fl_submit_seq.fetch_add(1, std::memory_order_relaxed) + 1 : 0;
+    const auto fl_trace = [&](const char* stage) {
+        if (fl_submit_trace) {
+            std::printf("GPU: FL submit #%llu %s\n",
+                        static_cast<unsigned long long>(fl_submit_id), stage);
+            std::fflush(stdout);
+        }
+    };
+    fl_trace("begin");
 
 #if TRACY_GPU_ENABLED
     auto* profiler_ctx = instance.GetProfilerContext();
@@ -418,10 +435,16 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
         // Until the next submission's first timestamp: mostly the GPU waiting for it.
         profiler->Mark(0x5B317ull, [] { return std::string{"(between submissions: GPU idle)"}; });
     }
+    fl_trace("sync-recording begin");
     SyncRecording();
+    fl_trace("sync-recording end");
     // Guest memory copies into staging read by this submission (copy threads).
+    fl_trace("host-copies begin");
     WaitHostCopies();
+    fl_trace("host-copies end");
+    fl_trace("cmdbuf-end begin");
     Check(current_cmdbuf.end());
+    fl_trace("cmdbuf-end end");
 
     const vk::Semaphore timeline = work_semaphore.Handle();
     info.AddSignal(timeline, signal_value);
@@ -450,11 +473,15 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     };
 
     ImGui::Core::TextureManager::Submit();
+    fl_trace("queue-submit begin");
     auto submit_result = instance.GetGraphicsQueue().submit(submit_info, info.fence);
+    fl_trace("queue-submit end");
     ASSERT_MSG(submit_result != vk::Result::eErrorDeviceLost, "Device lost during submit");
 
     work_semaphore.Refresh();
+    fl_trace("new-cmdbuf begin");
     AllocateWorkerCommandBuffers();
+    fl_trace("new-cmdbuf end");
 
     // Apply pending operations
     PopPendingOperations();
