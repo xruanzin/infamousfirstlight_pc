@@ -25,9 +25,9 @@ static bool FlGpuViewTrace() {
 vk::ImageViewType ConvertImageViewType(AmdGpu::ImageType type) {
     switch (type) {
     case AmdGpu::ImageType::Color1D:
-        return AmdGpu::All1DAs2D() ? vk::ImageViewType::e2D : vk::ImageViewType::e1D;
+        return vk::ImageViewType::e1D;
     case AmdGpu::ImageType::Color1DArray:
-        return AmdGpu::All1DAs2D() ? vk::ImageViewType::e2DArray : vk::ImageViewType::e1DArray;
+        return vk::ImageViewType::e1DArray;
     case AmdGpu::ImageType::Color2D:
     case AmdGpu::ImageType::Color2DMsaa:
         return vk::ImageViewType::e2D;
@@ -44,10 +44,7 @@ bool IsViewTypeCompatible(AmdGpu::ImageType view_type, AmdGpu::ImageType image_t
     switch (view_type) {
     case AmdGpu::ImageType::Color1D:
     case AmdGpu::ImageType::Color1DArray:
-        return image_type == AmdGpu::ImageType::Color1D ||
-               (AmdGpu::All1DAs2D() &&
-                (image_type == AmdGpu::ImageType::Color2D ||
-                 image_type == AmdGpu::ImageType::Color3D));
+        return image_type == AmdGpu::ImageType::Color1D;
     case AmdGpu::ImageType::Color2D:
     case AmdGpu::ImageType::Color2DArray:
     case AmdGpu::ImageType::Color2DMsaa:
