@@ -1,5 +1,9 @@
 name: First Light bootstrap checks
 
+concurrency:
+  group: firstlight-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [firstlight-bootstrap]
