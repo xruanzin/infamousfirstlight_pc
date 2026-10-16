@@ -771,19 +771,19 @@ void Instance::CollectDeviceParameters() {
     if (!bc_env || !*bc_env) {
         bc_env = std::getenv("BB_BC_TINY");
     }
-    const bool bc_tiny = bc_env && *bc_env ? *bc_env == '1'
-                                           : driver_id == vk::DriverId::eAmdProprietary;
+    // Keep the guest resource dimension intact by default. The known-good First Light
+    // path reaches Vulkan with Color1D as VK_IMAGE_TYPE_1D; legacy host-2D/CPU-decode modes are
+    // now explicit A/B toggles only instead of AMD-proprietary defaults.
+    const bool bc_tiny = bc_env && *bc_env && *bc_env == '1';
     AmdGpu::bc_tiny_decode.store(bc_tiny, std::memory_order_relaxed);
-    std::printf("GPU: First Light tiny BC1-BC5 1D fallback %s (FL_BC_TINY=0/1)\n",
-                bc_tiny ? "CPU decode enabled" : "disabled");
+    std::printf("GPU: First Light legacy tiny BC fallback %s (opt-in FL_BC_TINY=1)\n",
+                bc_tiny ? "enabled" : "disabled");
     std::fflush(stdout);
 
     const char* one_d_env = std::getenv("FL_ALL_1D_AS_2D");
-    const bool all_1d_as_2d =
-        one_d_env && *one_d_env ? *one_d_env == '1'
-                                : driver_id == vk::DriverId::eAmdProprietary;
+    const bool all_1d_as_2d = one_d_env && *one_d_env && *one_d_env == '1';
     AmdGpu::all_1d_as_2d.store(all_1d_as_2d, std::memory_order_relaxed);
-    std::printf("GPU: First Light guest 1D -> host 2D height-one %s (FL_ALL_1D_AS_2D=0/1)\n",
+    std::printf("GPU: First Light legacy guest 1D -> host 2D %s (opt-in FL_ALL_1D_AS_2D=1)\n",
                 all_1d_as_2d ? "enabled" : "disabled");
     std::fflush(stdout);
     LOG_INFO(Render_Vulkan, "GPU_Vendor: {}", vendor_name);
