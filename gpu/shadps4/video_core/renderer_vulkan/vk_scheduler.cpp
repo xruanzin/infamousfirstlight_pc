@@ -59,9 +59,7 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
     if (is_rendering && render_state == new_state) {
         return;
     }
-    fl_trace("end-rendering begin");
     EndRendering();
-    fl_trace("end-rendering end");
     is_rendering = true;
     render_state = new_state;
 
@@ -430,7 +428,9 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
         on_submit(info);
     }
 
+    fl_trace("end-rendering begin");
     EndRendering();
+    fl_trace("end-rendering end");
     if (auto* profiler = GpuProfiler::Get(); profiler && profiler->Records(this)) {
         // Until the next submission's first timestamp: mostly the GPU waiting for it.
         profiler->Mark(0x5B317ull, [] { return std::string{"(between submissions: GPU idle)"}; });
