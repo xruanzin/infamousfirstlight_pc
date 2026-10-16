@@ -19,7 +19,7 @@ UPDATE_MANIFEST_URL = (
     "https://raw.githubusercontent.com/xruanzin/infamousfirstlight_pc/"
     "firstlight-bootstrap/runtime/update_manifest.json"
 )
-HTTP_USER_AGENT = "FirstLightLauncher/3"
+HTTP_USER_AGENT = "FirstLightLauncher/3.1"
 # Rolling launcher channel enabled.
 MAX_LIVE_LOG_CHARS = 350_000
 MAX_EVENTS_PER_TICK = 80
