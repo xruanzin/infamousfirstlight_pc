@@ -176,6 +176,18 @@ ImageView::ImageView(const Vulkan::Instance& instance, const ImageViewInfo& info
             .layerCount = info.range.extent.layers,
         },
     };
+    const u32 host_layers = image.info.HostLayers();
+    const u64 view_end_layer =
+        u64(image_view_ci.subresourceRange.baseArrayLayer) +
+        u64(image_view_ci.subresourceRange.layerCount);
+    ASSERT_MSG(view_end_layer <= host_layers,
+               "View range exceeds host VkImage layers: base={} count={} end={} hostLayers={} "
+               "guestLayers={} format={} viewType={}",
+               image_view_ci.subresourceRange.baseArrayLayer,
+               image_view_ci.subresourceRange.layerCount, view_end_layer, host_layers,
+               image.info.resources.layers, vk::to_string(image_view_ci.format),
+               vk::to_string(image_view_ci.viewType));
+
     if (!IsViewTypeCompatible(info.type, image.info.type)) {
         LOG_ERROR(Render_Vulkan, "image view type {} is incompatible with image type {}",
                   magic_enum::enum_name(info.type), magic_enum::enum_name(image.info.type));
@@ -191,6 +203,12 @@ ImageView::ImageView(const Vulkan::Instance& instance, const ImageViewInfo& info
                     image_view_ci.subresourceRange.baseArrayLayer,
                     image_view_ci.subresourceRange.layerCount,
                     image.info.props.is_bc_decoded ? 1u : 0u);
+        std::printf("GPU: FL resource view-create limits image#%llu guestLayers=%u hostLayers=%u viewEnd=%llu\\n",
+                    static_cast<unsigned long long>(image.image_uid), image.info.resources.layers,
+                    image.info.HostLayers(),
+                    static_cast<unsigned long long>(
+                        u64(image_view_ci.subresourceRange.baseArrayLayer) +
+                        u64(image_view_ci.subresourceRange.layerCount)));
         std::fflush(stdout);
     }
     auto [view_result, view] = instance.GetDevice().createImageViewUnique(image_view_ci);
