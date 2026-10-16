@@ -19,7 +19,10 @@ UPDATE_MANIFEST_URL = (
     "https://raw.githubusercontent.com/xruanzin/infamousfirstlight_pc/"
     "firstlight-bootstrap/runtime/update_manifest.json"
 )
-HTTP_USER_AGENT = "FirstLightLauncher/2"
+HTTP_USER_AGENT = "FirstLightLauncher/3"
+MAX_LIVE_LOG_CHARS = 350_000
+MAX_EVENTS_PER_TICK = 80
+POLL_BUDGET_SECONDS = 0.015
 
 
 def portable_root():
@@ -41,6 +44,9 @@ class FirstLightLauncher:
         self.events = queue.Queue()
         self.process = None
         self.reader = None
+        self.waiter = None
+        self.process_generation = 0
+        self.finished_generation = -1
         self.updating = False
         self.last_exit_code = None
 
@@ -164,8 +170,24 @@ class FirstLightLauncher:
         return None
 
     def append_log(self, text):
+        # GPU tracing can produce very large physical lines. Keeping an unbounded Tk Text
+        # widget and draining the whole queue in one UI callback made the launcher appear
+        # frozen after a driver crash. The complete log is already written by the bootstrap;
+        # the launcher only needs a useful live tail.
+        if not text:
+            return
+        if len(text) > 80_000:
+            text = "[... trecho muito grande omitido da visualização; o arquivo de log mantém tudo ...]\n" + text[-80_000:]
         self.log.configure(state="normal")
         self.log.insert("end", text)
+        try:
+            count = int(self.log.count("1.0", "end-1c", "chars")[0])
+        except (tk.TclError, TypeError, ValueError):
+            count = 0
+        if count > MAX_LIVE_LOG_CHARS:
+            trim = count - MAX_LIVE_LOG_CHARS
+            self.log.delete("1.0", "1.0 + %d chars" % trim)
+            self.log.insert("1.0", "[... início removido da visualização; log completo salvo em user\\last_run.log ...]\n")
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -215,7 +237,7 @@ class FirstLightLauncher:
 
         flags = CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
-            self.process = subprocess.Popen(
+            process = subprocess.Popen(
                 [bootstrap, game, "--console"],
                 cwd=self.base,
                 stdout=subprocess.PIPE,
@@ -227,22 +249,35 @@ class FirstLightLauncher:
                 bufsize=1,
                 creationflags=flags,
             )
+            self.process = process
+            self.process_generation += 1
+            generation = self.process_generation
         except OSError as exc:
             self.finish_launch(None, "Não foi possível iniciar FirstLightBootstrap.exe: %s" % exc)
             return
 
-        self.reader = threading.Thread(target=self.read_output, daemon=True)
+        # Output and process lifetime are deliberately independent. A crashed GPU/driver can
+        # leave an inherited pipe handle open even after the bootstrap process is gone; waiting
+        # for EOF before noticing process exit used to leave the launcher stuck.
+        self.reader = threading.Thread(target=self.read_output, args=(process, generation), daemon=True)
+        self.waiter = threading.Thread(target=self.wait_process, args=(process, generation), daemon=True)
         self.reader.start()
+        self.waiter.start()
 
-    def read_output(self):
+    def read_output(self, process, generation):
         try:
-            if self.process.stdout:
-                for line in self.process.stdout:
-                    self.events.put(("line", line))
-            code = self.process.wait()
-            self.events.put(("done", code))
+            if process.stdout:
+                for line in process.stdout:
+                    self.events.put(("line", (generation, line)))
         except Exception as exc:
-            self.events.put(("reader_error", str(exc)))
+            self.events.put(("reader_error", (generation, str(exc))))
+
+    def wait_process(self, process, generation):
+        try:
+            code = process.wait()
+            self.events.put(("done", (generation, code)))
+        except Exception as exc:
+            self.events.put(("reader_error", (generation, str(exc))))
 
     def http_bytes(self, url):
         request = urllib.request.Request(url, headers={"User-Agent": HTTP_USER_AGENT, "Cache-Control": "no-cache"})
@@ -328,28 +363,48 @@ class FirstLightLauncher:
             self.events.put(("update_error", str(exc)))
 
     def poll_events(self):
+        # Never drain an unlimited trace queue inside one Tk callback. This keeps buttons,
+        # repainting and crash diagnosis responsive even when Vulkan emits hundreds of KB.
+        started = time.monotonic()
+        handled = 0
+        chunks = []
         try:
-            while True:
+            while handled < MAX_EVENTS_PER_TICK and time.monotonic() - started < POLL_BUDGET_SECONDS:
                 kind, payload = self.events.get_nowait()
+                handled += 1
                 if kind == "line":
-                    self.append_log(payload)
-                elif kind == "done":
-                    self.finish_launch(payload)
-                elif kind == "reader_error":
-                    self.finish_launch(None, "Falha ao capturar o log: " + payload)
-                elif kind == "update_status":
-                    self.status.set(payload)
-                elif kind == "update_done":
-                    self.finish_update(payload)
-                elif kind == "update_error":
-                    self.updating = False
-                    self.set_busy(False)
-                    self.status.set("Falha ao atualizar.")
-                    self.reason.set(payload)
-                    messagebox.showerror("Atualizar port", payload)
+                    generation, line = payload
+                    if generation == self.process_generation:
+                        chunks.append(line)
+                else:
+                    if chunks:
+                        self.append_log("".join(chunks))
+                        chunks = []
+                    if kind == "done":
+                        generation, code = payload
+                        if generation == self.process_generation and generation != self.finished_generation:
+                            self.finished_generation = generation
+                            self.finish_launch(code)
+                    elif kind == "reader_error":
+                        generation, error = payload
+                        if generation == self.process_generation and generation != self.finished_generation:
+                            self.finished_generation = generation
+                            self.finish_launch(None, "Falha ao capturar o log: " + error)
+                    elif kind == "update_status":
+                        self.status.set(payload)
+                    elif kind == "update_done":
+                        self.finish_update(payload)
+                    elif kind == "update_error":
+                        self.updating = False
+                        self.set_busy(False)
+                        self.status.set("Falha ao atualizar.")
+                        self.reason.set(payload)
+                        messagebox.showerror("Atualizar port", payload)
         except queue.Empty:
             pass
-        self.root.after(50, self.poll_events)
+        if chunks:
+            self.append_log("".join(chunks))
+        self.root.after(25 if not self.events.empty() else 60, self.poll_events)
 
     def finish_update(self, state):
         self.updating = False
@@ -431,14 +486,31 @@ class FirstLightLauncher:
         if data:
             self.reason.set("Última execução: " + self.diagnosis_summary(data.get("exit_code"), data))
 
-    def stop_game(self):
-        if not self.process or self.process.poll() is not None:
+    def terminate_process_tree(self, process):
+        if not process or process.poll() is not None:
             return
-        if messagebox.askyesno("Encerrar", "Deseja encerrar a execução atual?"):
+        try:
+            if os.name == "nt":
+                subprocess.Popen(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+            else:
+                process.terminate()
+        except OSError:
             try:
-                self.process.terminate()
+                process.terminate()
             except OSError:
                 pass
+
+    def stop_game(self):
+        process = self.process
+        if not process or process.poll() is not None:
+            return
+        if messagebox.askyesno("Encerrar", "Deseja encerrar a execução atual?"):
+            self.terminate_process_tree(process)
 
     def open_logs(self):
         os.makedirs(self.user_dir, exist_ok=True)
@@ -500,10 +572,7 @@ class FirstLightLauncher:
         if self.process and self.process.poll() is None:
             if not messagebox.askyesno("Fechar launcher", "O jogo ainda está em execução. Encerrar e fechar?"):
                 return
-            try:
-                self.process.terminate()
-            except OSError:
-                pass
+            self.terminate_process_tree(self.process)
         self.root.destroy()
 
 
