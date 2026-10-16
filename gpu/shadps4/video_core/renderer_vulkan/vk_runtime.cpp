@@ -238,12 +238,6 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
     bool needs_flush =
         Transit(dst, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eCopy,
                 vk::AccessFlagBits2::eTransferWrite);
-    if (fl_trace_this) {
-        std::printf("GPU: FL upload #%llu recorded\n",
-                    static_cast<unsigned long long>(fl_seq));
-        std::fflush(stdout);
-    }
-
     for (const auto& copy : upload_copies) {
         const auto copy_size = BufferImageCopySize(copy, dst->info.pixel_format);
         needs_flush |= IsBufferAccessed(src, copy.bufferOffset, copy_size);
@@ -300,6 +294,12 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
             cmdbuf.copyBufferToImage(src_handle, image, vk::ImageLayout::eTransferDstOptimal,
                                      regions.size(), regions.data());
         });
+    }
+
+    if (fl_trace_this) {
+        std::printf("GPU: FL upload #%llu recorded\n",
+                    static_cast<unsigned long long>(fl_seq));
+        std::fflush(stdout);
     }
 
     for (const auto& copy : upload_copies) {
