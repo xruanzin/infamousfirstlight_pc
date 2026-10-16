@@ -777,6 +777,15 @@ void Instance::CollectDeviceParameters() {
     std::printf("GPU: First Light tiny BC1-BC5 1D fallback %s (FL_BC_TINY=0/1)\n",
                 bc_tiny ? "CPU decode enabled" : "disabled");
     std::fflush(stdout);
+
+    const char* one_d_env = std::getenv("FL_ALL_1D_AS_2D");
+    const bool all_1d_as_2d =
+        one_d_env && *one_d_env ? *one_d_env == '1'
+                                : driver_id == vk::DriverId::eAmdProprietary;
+    AmdGpu::all_1d_as_2d.store(all_1d_as_2d, std::memory_order_relaxed);
+    std::printf("GPU: First Light guest 1D -> host 2D height-one %s (FL_ALL_1D_AS_2D=0/1)\n",
+                all_1d_as_2d ? "enabled" : "disabled");
+    std::fflush(stdout);
     LOG_INFO(Render_Vulkan, "GPU_Vendor: {}", vendor_name);
     LOG_INFO(Render_Vulkan, "GPU_Model: {}", model_name);
     LOG_INFO(Render_Vulkan, "GPU_Integrated: {}", IsIntegrated() ? "Yes" : "No");
