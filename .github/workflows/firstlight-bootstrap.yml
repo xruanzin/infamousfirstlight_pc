@@ -13,6 +13,11 @@ on:
       - ".github/workflows/firstlight-hotfix.yml"
       - ".github/workflows/firstlight-launcher.yml"
       - "launcher_firstlight.py"
+      - ".github/workflows/firstlight-probe.yml"
+      - "src/probe.c"
+      - "src/runtime*.h"
+      - "src/runtime*.c"
+      - "gpu/**"
   pull_request:
     branches: [windows]
 
