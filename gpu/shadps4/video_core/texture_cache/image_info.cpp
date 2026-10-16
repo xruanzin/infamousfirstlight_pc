@@ -218,6 +218,7 @@ std::optional<BcDecode::Kind> BcTinyDecodeKind(vk::Format format) noexcept {
 
 bool ImageInfo::IsCompatible(const ImageInfo& info) const {
     return props.is_bc_decoded == info.props.is_bc_decoded &&
+           props.is_host_2d == info.props.is_host_2d &&
            (IsVulkanFormatCompatible(pixel_format, info.pixel_format) ||
             IsVulkanFormatCompatible(info.pixel_format, pixel_format)) &&
            num_samples == info.num_samples && num_bits == info.num_bits;
