@@ -36,11 +36,72 @@ static vk::ImageType ConvertImageType(AmdGpu::ImageType type) noexcept {
     }
 }
 
+static vk::ImageType ConvertImageType(const VideoCore::ImageInfo& info) noexcept {
+    // The physical Vulkan representation may intentionally differ from the guest descriptor.
+    // Copies/barriers must follow the host image that was actually created.
+    if (info.props.is_host_2d) {
+        return vk::ImageType::e2D;
+    }
+    return ConvertImageType(info.type);
+}
+
+static void ValidateBufferImageCopy(const VideoCore::ImageInfo& info,
+                                    const vk::BufferImageCopy& copy) {
+    ASSERT_MSG(copy.imageSubresource.mipLevel < info.resources.levels,
+               "Buffer/image copy mip {} outside {} levels", copy.imageSubresource.mipLevel,
+               info.resources.levels);
+    ASSERT_MSG(copy.imageSubresource.layerCount > 0,
+               "Buffer/image copy has zero layers");
+    ASSERT_MSG(copy.imageSubresource.baseArrayLayer < info.resources.layers &&
+                   copy.imageSubresource.layerCount <=
+                       info.resources.layers - copy.imageSubresource.baseArrayLayer,
+               "Buffer/image copy layers {}+{} outside {} layers",
+               copy.imageSubresource.baseArrayLayer, copy.imageSubresource.layerCount,
+               info.resources.layers);
+
+    const u32 mip = copy.imageSubresource.mipLevel;
+    const u32 width = std::max(info.size.width >> mip, 1u);
+    const u32 height = std::max(info.size.height >> mip, 1u);
+    const u32 depth = std::max(info.size.depth >> mip, 1u);
+    ASSERT_MSG(copy.imageOffset.x >= 0 && copy.imageOffset.y >= 0 && copy.imageOffset.z >= 0,
+               "Negative image copy offset");
+    ASSERT_MSG(u32(copy.imageOffset.x) + copy.imageExtent.width <= width &&
+                   u32(copy.imageOffset.y) + copy.imageExtent.height <= height,
+               "Buffer/image copy extent {}x{} at {},{} exceeds mip {}x{}",
+               copy.imageExtent.width, copy.imageExtent.height, copy.imageOffset.x,
+               copy.imageOffset.y, width, height);
+
+    const auto host_type = ConvertImageType(info);
+    if (host_type == vk::ImageType::e1D) {
+        ASSERT_MSG(copy.imageOffset.y == 0 && copy.imageExtent.height == 1 &&
+                       copy.imageOffset.z == 0 && copy.imageExtent.depth == 1,
+                   "1D host image received non-1D copy extent");
+    } else if (host_type == vk::ImageType::e2D) {
+        ASSERT_MSG(copy.imageOffset.z == 0 && copy.imageExtent.depth == 1,
+                   "2D host image received depth {}", copy.imageExtent.depth);
+    } else {
+        ASSERT_MSG(u32(copy.imageOffset.z) + copy.imageExtent.depth <= depth,
+                   "3D buffer/image copy exceeds mip depth {}", depth);
+    }
+
+    const auto block = vk::blockExtent(info.pixel_format);
+    if (block[0] > 1 || block[1] > 1) {
+        ASSERT_MSG((u32(copy.imageOffset.x) % block[0]) == 0 &&
+                       (u32(copy.imageOffset.y) % block[1]) == 0,
+                   "Compressed image copy offset is not block aligned");
+        ASSERT_MSG(copy.bufferRowLength == 0 || (copy.bufferRowLength % block[0]) == 0,
+                   "Compressed bufferRowLength {} is not block aligned", copy.bufferRowLength);
+        ASSERT_MSG(copy.bufferImageHeight == 0 || (copy.bufferImageHeight % block[1]) == 0,
+                   "Compressed bufferImageHeight {} is not block aligned",
+                   copy.bufferImageHeight);
+    }
+}
+
 static std::pair<u32, u32> SanitizeCopyLayers(const VideoCore::ImageInfo& src_info,
                                               const VideoCore::ImageInfo& dst_info,
                                               const u32 depth) {
-    const auto vk_src_type = ConvertImageType(src_info.type);
-    const auto vk_dst_type = ConvertImageType(dst_info.type);
+    const auto vk_src_type = ConvertImageType(src_info);
+    const auto vk_dst_type = ConvertImageType(dst_info);
 
     u32 src_layers = src_info.resources.layers;
     u32 dst_layers = dst_info.resources.layers;
@@ -58,9 +119,17 @@ static std::pair<u32, u32> SanitizeCopyLayers(const VideoCore::ImageInfo& src_in
     // If the image type is equal, layer count must match. Take the minimum of both.
     if (vk_src_type == vk_dst_type) {
         if (src_layers != dst_layers) {
-            LOG_WARNING(Render_Vulkan,
-                        "Coercing copy source layers {} and destination layers {} to minimum.",
-                        src_layers, dst_layers);
+            LOG_WARNING(
+                Render_Vulkan,
+                "BCN COPY DEBUG layer mismatch: src guest={:#x} fmt={} guestType={} hostType={} "
+                "layers={} host2d={} decoded={} -> dst guest={:#x} fmt={} guestType={} hostType={} "
+                "layers={} host2d={} decoded={}; copying minimum",
+                src_info.guest_address, vk::to_string(src_info.pixel_format), u32(src_info.type),
+                vk::to_string(vk_src_type), src_layers, src_info.props.is_host_2d,
+                src_info.props.is_bc_decoded, dst_info.guest_address,
+                vk::to_string(dst_info.pixel_format), u32(dst_info.type),
+                vk::to_string(vk_dst_type), dst_layers, dst_info.props.is_host_2d,
+                dst_info.props.is_bc_decoded);
             src_layers = dst_layers = std::min(src_layers, dst_layers);
         }
     } else {
@@ -231,6 +300,9 @@ Runtime::TransferMark::~TransferMark() {
 
 void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
                           std::span<const vk::BufferImageCopy> upload_copies) {
+    for (const auto& copy : upload_copies) {
+        ValidateBufferImageCopy(dst->info, copy);
+    }
     SetBackingSamples(dst, dst->info.num_samples, false);
     scheduler.EndRendering();
     const TransferMark mark{*this, "image upload", *dst};
@@ -258,14 +330,16 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
         fl_seq = fl_upload_seq.fetch_add(1, std::memory_order_relaxed) + 1;
         std::printf(
             "GPU: FL upload #%llu begin guest=0x%llx format=%s bc=%s size=%ux%ux%u "
-            "host2d=%u decoded=%u regions=%zu\n",
+            "host2d=%u decoded=%u regions=%zu hostType=%s usage=%s flags=%s\n",
             static_cast<unsigned long long>(fl_seq),
             static_cast<unsigned long long>(dst->info.guest_address),
             vk::to_string(dst->info.pixel_format).c_str(),
             vk::to_string(dst->info.bc_format).c_str(),
             dst->info.size.width, dst->info.size.height, dst->info.size.depth,
             dst->info.props.is_host_2d ? 1u : 0u, dst->info.props.is_bc_decoded ? 1u : 0u,
-            upload_copies.size());
+            upload_copies.size(), vk::to_string(ConvertImageType(dst->info)).c_str(),
+            vk::to_string(dst->backing->image.image_ci.usage).c_str(),
+            vk::to_string(dst->backing->image.image_ci.flags).c_str());
         for (size_t i = 0; i < upload_copies.size() && i < 4; ++i) {
             const auto& copy = upload_copies[i];
             std::printf(
@@ -366,11 +440,11 @@ void Runtime::CopyImage(VideoCore::Image* src, VideoCore::Image* dst) {
     const vk::ImageAspectFlags src_aspect = src->aspect_mask & ~vk::ImageAspectFlagBits::eStencil;
     const vk::ImageAspectFlags dst_aspect = dst->aspect_mask & ~vk::ImageAspectFlagBits::eStencil;
 
-    const bool src_is_2d = ConvertImageType(src->info.type) == vk::ImageType::e2D;
-    const bool src_is_3d = ConvertImageType(src->info.type) == vk::ImageType::e3D;
+    const bool src_is_2d = ConvertImageType(src->info) == vk::ImageType::e2D;
+    const bool src_is_3d = ConvertImageType(src->info) == vk::ImageType::e3D;
 
-    const bool dst_is_2d = ConvertImageType(dst->info.type) == vk::ImageType::e2D;
-    const bool dst_is_3d = ConvertImageType(dst->info.type) == vk::ImageType::e3D;
+    const bool dst_is_2d = ConvertImageType(dst->info) == vk::ImageType::e2D;
+    const bool dst_is_3d = ConvertImageType(dst->info) == vk::ImageType::e3D;
 
     const bool is_2d_to_3d = src_is_2d && dst_is_3d;
     const bool is_3d_to_2d = src_is_3d && dst_is_2d;
