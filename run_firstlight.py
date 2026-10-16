@@ -126,6 +126,9 @@ def main() -> int:
     parser.add_argument("--prepare-only", action="store_true", help="prepare/link reports without launching")
     parser.add_argument("--console", action="store_true", help="show bb-probe output live instead of only in the log")
     parser.add_argument("--strict-imports", action="store_true", help="ask bb-probe for strict import diagnostics")
+    parser.add_argument("--cpu-only", action="store_true", help="run guest CPU/runtime without initializing Vulkan")
+    parser.add_argument("--import-trace", type=int, default=None,
+                        help="log the first N calls of every host-resolved import (bring-up diagnostics)")
     parser.add_argument("--timeout", type=int, default=None, help="watchdog timeout in seconds; 0 disables")
     args = parser.parse_args()
 
@@ -190,6 +193,13 @@ def main() -> int:
     env.setdefault("BB_VBLANK_HZ", "60")
     env.setdefault("BB_FPS", "30")
     env.setdefault("BB_CONTENT_SKU", "full")
+    if args.import_trace is not None:
+        if args.import_trace < 0:
+            fail("--import-trace must be zero or greater")
+        if args.import_trace:
+            env["FL_IMPORT_TRACE"]=str(args.import_trace)
+        else:
+            env.pop("FL_IMPORT_TRACE",None)
 
     # Development builds use MSYS2's runtime DLLs if they are not copied beside
     # bb-probe.exe yet.
@@ -281,6 +291,8 @@ def main() -> int:
     ]
     if args.strict_imports:
         command.append("--strict-imports")
+    if args.cpu_only:
+        command.append("--cpu-only")
 
     log_path = user / "last_run.log"
     header = (
