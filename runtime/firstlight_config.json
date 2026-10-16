@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "env_defaults": {
+    "BB_VBLANK_HZ": "60",
+    "BB_FPS": "30",
+    "BB_CONTENT_SKU": "full",
+    "BB_VK_RECORD_THREAD": "0",
+    "FL_GPU_UPLOAD_TRACE": "1",
+    "FL_GPU_RESOURCE_TRACE": "1",
+    "FL_ALL_1D_AS_2D": "0",
+    "FL_BC_TINY": "0",
+    "FL_BC_CAPABILITY_FALLBACK": "0",
+    "FL_IMPORT_TRACE": "1"
+  }
+}
