@@ -38,6 +38,7 @@ struct ImageProperties {
     u32 has_stencil : 1;
     // Host image contains CPU-decoded texels while guest memory remains BC-compressed.
     u32 is_bc_decoded : 1;
+    u32 is_host_2d : 1;
 };
 
 struct ImageInfo {
