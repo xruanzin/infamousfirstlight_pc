@@ -94,6 +94,7 @@ New-Item -ItemType Directory -Force (Join-Path $OutputRoot "bin") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "scripts") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "tools") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "patches") | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $OutputRoot "src") | Out-Null
 
 Copy-Item (Join-Path $PyDist "FirstLightBootstrap\*") $OutputRoot -Recurse -Force
 
@@ -114,6 +115,7 @@ Copy-Item (Join-Path $Root "tools\firstlight_coverage.py") (Join-Path $OutputRoo
 Copy-Item (Join-Path $Root "tools\firstlight_modules.py") (Join-Path $OutputRoot "tools\") -Force
 Copy-Item (Join-Path $Root "tools\firstlight_log.py") (Join-Path $OutputRoot "tools\") -Force
 Copy-Item (Join-Path $Root "tools\legacy-cpu-plan.json") (Join-Path $OutputRoot "tools\") -Force
+Copy-Item (Join-Path $Root "src\import_names.inc") (Join-Path $OutputRoot "src\") -Force
 if (Test-Path (Join-Path $Root "patches\redzone.json")) {
     Copy-Item (Join-Path $Root "patches\redzone.json") (Join-Path $OutputRoot "patches\") -Force
 }
