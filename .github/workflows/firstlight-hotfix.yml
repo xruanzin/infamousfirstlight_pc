@@ -1,0 +1,48 @@
+name: First Light native hotfix DLL
+
+on:
+  push:
+    branches: [firstlight-bootstrap]
+    paths:
+      - "src/hotfix/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build standalone hotfix DLL
+        shell: pwsh
+        run: |
+          $clang = (Get-Command clang.exe -ErrorAction SilentlyContinue).Source
+          if (-not $clang) {
+            $candidate = "C:\Program Files\LLVM\bin\clang.exe"
+            if (Test-Path $candidate) { $clang = $candidate }
+          }
+          if (-not $clang) { throw "clang.exe not found on windows-latest" }
+          & $clang -shared -O2 -Wall -Wextra -Werror src/hotfix/firstlight_hotfix.c -o firstlight_runtime.dll
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path firstlight_runtime.dll)) {
+            throw "Failed to build firstlight_runtime.dll"
+          }
+
+      - name: Publish rolling development hotfix
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view firstlight-dev-hotfix --repo ${{ github.repository }} *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create firstlight-dev-hotfix --repo ${{ github.repository }} --prerelease --title "First Light development hotfix" --notes "Rolling runtime hotfix used by FirstLightLauncher.exe. This is a development channel, not a stable release."
+          }
+          gh release upload firstlight-dev-hotfix firstlight_runtime.dll --repo ${{ github.repository }} --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firstlight-runtime-hotfix
+          path: firstlight_runtime.dll
+          if-no-files-found: error
