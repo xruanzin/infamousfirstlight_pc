@@ -15,13 +15,15 @@ jobs:
         with:
           python-version: "3.11"
       - name: Python syntax
-        run: python -m py_compile run_firstlight.py tools/firstlight_triage.py tools/firstlight_coverage.py scripts/prepare.py scripts/link_modules.py scripts/content_profile.py
+        run: python -m py_compile run_firstlight.py tools/firstlight_triage.py tools/firstlight_coverage.py tools/firstlight_modules.py tools/firstlight_log.py scripts/prepare.py scripts/link_modules.py scripts/content_profile.py
       - name: Pure runtime syntax
         run: cc -std=c11 -Wall -Wextra -Werror -I. -Isrc -fsyntax-only src/runtime_eventflag.c src/runtime_content.c src/runtime_file.c
       - name: Bootstrap tools load
         run: |
           python tools/firstlight_triage.py --help >/dev/null
           python tools/firstlight_coverage.py --help >/dev/null
+          python tools/firstlight_modules.py --help >/dev/null
+          python tools/firstlight_log.py --help >/dev/null
 
   windows-build:
     runs-on: windows-latest
