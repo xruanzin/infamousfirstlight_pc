@@ -1,6 +1,7 @@
 param(
     [string]$Python = "python",
-    [string]$OutputRoot = ""
+    [string]$OutputRoot = "",
+    [string]$IconPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,8 +18,33 @@ if (-not (Test-Path $Probe)) {
     throw "Build out\bb-probe.exe first."
 }
 
-& $Python -m pip install --disable-pip-version-check -q pyinstaller
-if ($LASTEXITCODE -ne 0) { throw "Failed to install PyInstaller." }
+& $Python -m pip install --disable-pip-version-check -q pyinstaller pillow
+if ($LASTEXITCODE -ne 0) { throw "Failed to install PyInstaller/Pillow." }
+
+# Keep copyrighted game artwork out of the repository. For a personal build, the packager can
+# consume icon0.png directly from the user's own CUSA00575 dump (or an explicit -IconPath).
+if (-not $IconPath -and $env:FL_ICON_PATH) {
+    $IconPath = $env:FL_ICON_PATH
+}
+if (-not $IconPath -and $env:FL_GAME_DIR) {
+    $Candidate = Join-Path $env:FL_GAME_DIR "sce_sys\icon0.png"
+    if (Test-Path $Candidate) { $IconPath = $Candidate }
+}
+$IconIco = ""
+if ($IconPath) {
+    $IconPath = [IO.Path]::GetFullPath($IconPath)
+    if (-not (Test-Path $IconPath)) { throw "First Light icon not found: $IconPath" }
+    $IconIco = Join-Path $Root "out\firstlight-icon.ico"
+    $IconScript = @'
+from PIL import Image
+import sys
+im = Image.open(sys.argv[1]).convert("RGBA")
+im.save(sys.argv[2], format="ICO", sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])
+'@
+    $IconScript | & $Python - $IconPath $IconIco
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $IconIco)) { throw "Failed to convert First Light icon." }
+    Write-Host "Using First Light icon: $IconPath"
+}
 
 $PyDist = Join-Path $Root "out\firstlight-pyi-dist"
 $PyWork = Join-Path $Root "out\firstlight-pyi-work"
@@ -38,6 +64,10 @@ $PyArgs = @(
     "--specpath",$PyWork,
     "--paths",(Join-Path $Root "scripts")
 )
+if ($IconIco) {
+    $PyArgs += "--icon"
+    $PyArgs += $IconIco
+}
 foreach ($Module in $Hidden) {
     $PyArgs += "--hidden-import"
     $PyArgs += $Module
