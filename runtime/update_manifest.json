@@ -10,6 +10,12 @@
       "kind": "text"
     },
     {
+      "path": "runtime/firstlight_config.json",
+      "url": "https://raw.githubusercontent.com/xruanzin/infamousfirstlight_pc/firstlight-bootstrap/runtime/firstlight_config.json",
+      "required": true,
+      "kind": "text"
+    },
+    {
       "path": "runtime/firstlight_runtime.dll",
       "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-hotfix/firstlight_runtime.dll",
       "required": false,
