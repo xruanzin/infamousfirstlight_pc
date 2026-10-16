@@ -156,6 +156,24 @@ class FirstLightLauncher:
             self.save_config()
             self.status.set("Diretório salvo.")
 
+    def bootstrap_env(self):
+        # Read the external compatibility profile in the launcher too. This lets a launcher
+        # hotfix inject new FL_*/BB_* defaults into an older FirstLightBootstrap.exe, because
+        # that bootstrap preserves values already present in its environment.
+        env = os.environ.copy()
+        path = os.path.join(self.runtime_dir, "firstlight_config.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            values = data.get("env_defaults", {})
+            if data.get("schema") == 1 and isinstance(values, dict):
+                for key, value in values.items():
+                    if isinstance(key, str) and isinstance(value, (str, int, float, bool)):
+                        env.setdefault(key, str(value))
+        except (OSError, ValueError, TypeError):
+            pass
+        return env
+
     def validate_game(self, path):
         if not path or not os.path.isdir(path):
             return "Selecione uma pasta válida do jogo."
@@ -241,6 +259,7 @@ class FirstLightLauncher:
             process = subprocess.Popen(
                 [bootstrap, game, "--console"],
                 cwd=self.base,
+                env=self.bootstrap_env(),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
