@@ -250,8 +250,26 @@ def main() -> int:
     print(f"Launching native guest code. Log: {log_path}")
 
     if args.console:
-        log_path.write_text(header, encoding="utf-8")
-        result = subprocess.run(command, env=env, stdin=subprocess.DEVNULL)
+        with log_path.open("w", encoding="utf-8", errors="replace") as log:
+            log.write(header)
+            log.flush()
+            process = subprocess.Popen(
+                command,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                errors="replace",
+                bufsize=1,
+            )
+            assert process.stdout is not None
+            for line in process.stdout:
+                print(line, end="")
+                log.write(line)
+                log.flush()
+            code = process.wait()
+        result_code = code
     else:
         with log_path.open("w", encoding="utf-8", errors="replace") as log:
             log.write(header)
@@ -264,9 +282,10 @@ def main() -> int:
                 stderr=subprocess.STDOUT,
                 creationflags=creation_flags(False),
             )
+        result_code = result.returncode
 
-    print(f"First Light exited with code {result.returncode}; log: {log_path}")
-    return result.returncode
+    print(f"First Light exited with code {result_code}; log: {log_path}")
+    return result_code
 
 
 if __name__ == "__main__":
