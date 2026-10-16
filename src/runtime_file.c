@@ -112,6 +112,29 @@ void runtime_file_configure(const char *app0,const char *user) {
     snprintf(user_root,sizeof(user_root),"%s",user);
     runtime_file_mount("/app0",app0);
     runtime_file_mount("/hostapp",app0);
+
+    /* Dump tools do not all preserve the same host layout.  Some put the
+     * package payload under dvdroot_ps4/ while keeping eboot.bin and sce_sys/
+     * at the parent.  The guest still sees one /app0.  Mount the common
+     * Sucker Punch payload roots over the parent only when the parent entry
+     * is absent, so both layouts work without copying/rearranging game data. */
+    static const char *payloads[]={
+        "art","movies","sound","ui","playgo.pgm","sce_discmap.plt","sce_discmap_patch.plt"
+    };
+    for (size_t i=0;i<sizeof(payloads)/sizeof(*payloads);++i) {
+        char direct[600], nested[600], guest[96], hostguest[96];
+        HostStat direct_stat, nested_stat;
+        if ((size_t)snprintf(direct,sizeof(direct),"%s/%s",app0,payloads[i])>=sizeof(direct) ||
+            (size_t)snprintf(nested,sizeof(nested),"%s/dvdroot_ps4/%s",app0,payloads[i])>=sizeof(nested))
+            continue;
+        if (!host_stat(direct,&direct_stat) || host_stat(nested,&nested_stat)) continue;
+        snprintf(guest,sizeof(guest),"/app0/%s",payloads[i]);
+        snprintf(hostguest,sizeof(hostguest),"/hostapp/%s",payloads[i]);
+        runtime_file_mount(guest,nested);
+        runtime_file_mount(hostguest,nested);
+        printf("Runtime: package layout bridge %s -> %s\n",guest,nested);
+    }
+
     const char *writable[]={"temp0","download0","data"};
     mkdir(user,0755);
     for (int i=0;i<3;++i) {
