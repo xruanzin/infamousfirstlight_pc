@@ -31,6 +31,8 @@ def main()->int:
   if m:
    stop={"kind":kind,"detail":m.group(1) if m.groups() else None}; break
  milestones=[name for name,rx in MILESTONES if rx.search(text)]
+ upload_lines=[line for line in text.splitlines() if line.startswith("GPU: FL upload #")]
+ last_upload=upload_lines[-1] if upload_lines else None
  if a.exit_code==0 and stop["kind"]=="unknown": stop={"kind":"clean_exit","detail":None}
  next_action={
   "unsupported_import":"implement or bind the reported ABI contract; do not success-stub it blindly",
@@ -43,7 +45,7 @@ def main()->int:
   "unknown":"inspect the tail of last_run.log; no known stop signature was found",
  }[stop["kind"]]
  report={"exit_code":a.exit_code,"stop":stop,"milestones":milestones,"next_action":next_action,
-         "log":str(a.log)}
+         "last_gpu_upload":last_upload,"log":str(a.log)}
  a.out.parent.mkdir(parents=True,exist_ok=True)
  a.out.write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
  print(f"Boot stage: {', '.join(milestones) if milestones else 'pre-entry/unknown'}")
