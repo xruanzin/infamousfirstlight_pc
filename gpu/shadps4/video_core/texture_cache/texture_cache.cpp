@@ -799,6 +799,10 @@ void TextureCache::RefreshImage(Image& image) {
     const bool is_gpu_dirty = True(image.flags & ImageFlagBits::GpuDirty);
 
     BbStats::image_upload_bytes.fetch_add(image.info.guest_size, std::memory_order_relaxed);
+    if (image.info.props.is_bc_decoded) {
+        UploadDecodedImage(image);
+        return;
+    }
     boost::container::small_vector<vk::BufferImageCopy, 14> image_copies;
     for (u32 m = 0; m < num_mips; m++) {
         const u32 width = std::max(image.info.size.width >> m, 1u);
@@ -860,6 +864,89 @@ void TextureCache::RefreshImage(Image& image) {
     }
 
     runtime.UploadImage(&image, buffer, image_copies);
+}
+
+void TextureCache::UploadDecodedImage(Image& image) {
+    // Guest memory remains BC-compressed; the host image is plain R/RG/RGBA texels.
+    // Decode only the small/1D resources selected by ImageInfo so the AMD Windows
+    // driver never receives the unsupported BC 1D image.
+    const ImageInfo& info = image.info;
+    const auto kind = BcTinyDecodeKind(info.bc_format);
+    ASSERT_MSG(kind.has_value(), "decoded BC image without a supported BC1-BC5 format");
+
+    const u32 block_bytes = BcDecode::BlockBytes(*kind);
+    const u32 texel_bytes = BcDecode::TexelBytes(*kind);
+    const u32 num_layers = info.resources.layers;
+    const u32 micro_mode = u32(AmdGpu::GetMicroTileMode(info.tile_mode));
+    const u32 thickness = AmdGpu::GetMicroTileThickness(info.array_mode);
+
+    std::vector<u8> guest(info.guest_size);
+    Core::Memory::Instance()->CopySparseMemory(info.guest_address, guest.data(), guest.size());
+
+    boost::container::small_vector<vk::BufferImageCopy, 14> copies;
+    u64 total = 0;
+    for (u32 m = 0; m < info.resources.levels; ++m) {
+        const u32 width = std::max(info.size.width >> m, 1u);
+        const u32 height = std::max(info.size.height >> m, 1u);
+        copies.push_back({
+            .bufferOffset = total,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .mipLevel = m,
+                .baseArrayLayer = 0,
+                .layerCount = num_layers,
+            },
+            .imageOffset = {0, 0, 0},
+            .imageExtent = {width, height, 1},
+        });
+        total += Common::AlignUp(u64(width) * height * num_layers * texel_bytes, 16);
+    }
+
+    const auto staging = runtime.GetStagingPool().Request(total, MemoryType::HostUncached, 16);
+    u8 texels[16 * 4];
+    for (u32 m = 0; m < info.resources.levels; ++m) {
+        const auto& mip = info.mips_layout[m];
+        const u32 width = copies[m].imageExtent.width;
+        const u32 height = copies[m].imageExtent.height;
+        const u32 pitch_blocks = std::max((mip.pitch + 3) / 4, 1u);
+        const u32 height_blocks = std::max((mip.height + 3) / 4, 1u);
+        u8* const dst = staging.mapped + copies[m].bufferOffset;
+
+        for (u32 layer = 0; layer < num_layers; ++layer) {
+            for (u32 by = 0; by < Common::DivCeil(height, 4u); ++by) {
+                for (u32 bx = 0; bx < Common::DivCeil(width, 4u); ++bx) {
+                    const u64 source_offset =
+                        mip.offset +
+                        (info.props.is_tiled
+                             ? BcDecode::MicroTiledOffset(bx, by, layer, pitch_blocks,
+                                                          height_blocks, micro_mode, thickness,
+                                                          info.num_bits)
+                             : ((u64(layer) * height_blocks + by) * pitch_blocks + bx) *
+                                   block_bytes);
+                    if (source_offset + block_bytes <= guest.size()) {
+                        BcDecode::DecodeBlock(*kind, guest.data() + source_offset, texels);
+                    } else {
+                        std::memset(texels, 0, sizeof(texels));
+                    }
+
+                    for (u32 ty = 0; ty < 4 && by * 4 + ty < height; ++ty) {
+                        const u32 y = by * 4 + ty;
+                        const u32 x = bx * 4;
+                        const u32 count = std::min(4u, width - x);
+                        std::memcpy(dst + ((u64(layer) * height + y) * width + x) * texel_bytes,
+                                    texels + ty * 4 * texel_bytes, count * texel_bytes);
+                    }
+                }
+            }
+        }
+        copies[m].bufferOffset += staging.offset;
+    }
+    staging.Flush();
+
+    scheduler.EndRendering();
+    runtime.UploadImage(&image, staging.buffer, copies);
 }
 
 vk::Sampler TextureCache::GetSampler(const AmdGpu::Sampler& sampler,
