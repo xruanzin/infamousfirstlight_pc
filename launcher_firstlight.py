@@ -314,6 +314,7 @@ class FirstLightLauncher:
             changed = []
             unchanged = []
             skipped = []
+            pending_launcher = None
             for item in manifest["files"]:
                 rel = item.get("path")
                 url = item.get("url")
@@ -346,8 +347,22 @@ class FirstLightLauncher:
                 if old == data:
                     unchanged.append(rel)
                     continue
-                self.atomic_replace(destination, data)
-                changed.append(rel)
+
+                current_exe = os.path.normcase(os.path.abspath(sys.executable))
+                is_self = (
+                    getattr(sys, "frozen", False)
+                    and os.path.normcase(destination) == current_exe
+                )
+                if is_self:
+                    stage_dir = os.path.join(self.user_dir, ".launcher-update")
+                    os.makedirs(stage_dir, exist_ok=True)
+                    staged = os.path.join(stage_dir, os.path.basename(destination))
+                    self.atomic_replace(staged, data)
+                    pending_launcher = {"staged": staged, "target": destination}
+                    changed.append(rel + " (reinício pendente)")
+                else:
+                    self.atomic_replace(destination, data)
+                    changed.append(rel)
 
             state = {
                 "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -355,6 +370,7 @@ class FirstLightLauncher:
                 "changed": changed,
                 "unchanged": unchanged,
                 "skipped": skipped,
+                "pending_launcher": pending_launcher,
             }
             with open(self.update_state_path, "w", encoding="utf-8") as f:
                 json.dump(state, f, ensure_ascii=False, indent=2)
@@ -423,6 +439,44 @@ class FirstLightLauncher:
         if skipped:
             self.reason.set(self.reason.get() + " Opcional indisponível: " + ", ".join(skipped))
         self.runtime_status.set(self.runtime_description())
+        pending = state.get("pending_launcher")
+        if pending:
+            self.status.set("Launcher atualizado.")
+            self.reason.set("A nova versão foi baixada. O launcher será reiniciado para substituir o EXE em uso.")
+            self.schedule_self_update(pending["staged"], pending["target"])
+
+    def schedule_self_update(self, staged, target):
+        if os.name != "nt":
+            self.reason.set("Atualização do launcher preparada; feche e substitua o executável pela versão em " + staged)
+            return
+        helper = os.path.join(self.user_dir, "_finish_launcher_update.cmd")
+        # cmd retries until Windows releases the mapped executable, then restarts the exact path.
+        script = (
+            "@echo off\r\n"
+            "setlocal\r\n"
+            ":retry\r\n"
+            ">nul 2>&1 ping 127.0.0.1 -n 2\r\n"
+            "copy /y \"" + staged + "\" \"" + target + "\" >nul 2>&1\r\n"
+            "if errorlevel 1 goto retry\r\n"
+            "del /q \"" + staged + "\" >nul 2>&1\r\n"
+            "start \"\" \"" + target + "\"\r\n"
+            "del /q \"%~f0\"\r\n"
+        )
+        try:
+            with open(helper, "w", encoding="utf-8", newline="") as f:
+                f.write(script)
+            subprocess.Popen(
+                ["cmd.exe", "/c", helper],
+                cwd=self.base,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            self.root.after(150, self.root.destroy)
+        except OSError as exc:
+            self.status.set("Launcher baixado, mas não reiniciado.")
+            self.reason.set("Feche o launcher e substitua manualmente pelo arquivo preparado. Erro: %s" % exc)
 
     def read_diagnosis(self):
         try:
