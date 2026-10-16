@@ -169,6 +169,18 @@ def main() -> int:
     named = sorted({base: names[base] for base in bases if base in names}.items())
     unknown = sorted(set(base for base in bases if base not in names))
 
+    module_presence = [
+        {
+            "name": name,
+            "bundled_in_dump": (game / "sce_module" / name).is_file(),
+            "provider": "native PRX available" if (game / "sce_module" / name).is_file()
+                        else "host runtime/HLE required",
+        }
+        for name in eboot["needed"]
+    ]
+    def payload_present(name: str) -> bool:
+        return (game / name).exists() or (game / "dvdroot_ps4" / name).exists()
+
     report = {
         "target": {
             "title": metadata.get("TITLE"),
@@ -189,6 +201,16 @@ def main() -> int:
             },
         },
         "libSceFios2": fios,
+        "dependency_audit": {
+            "eboot_needed_modules": module_presence,
+            "native_module_count": sum(item["bundled_in_dump"] for item in module_presence),
+            "host_module_count": sum(not item["bundled_in_dump"] for item in module_presence),
+            "payload": {
+                "art": payload_present("art"),
+                "playgo.pgm": payload_present("playgo.pgm"),
+            },
+            "note": "A PS4 system PRX absent from the game dump is not automatically a missing game file; it must be supplied by the host runtime/HLE.",
+        },
         "runtime_name_coverage": {
             "known_count": len(named),
             "unknown_count": len(unknown),
@@ -208,6 +230,10 @@ def main() -> int:
         f"{metadata.get('TITLE')} | {metadata.get('TITLE_ID')} | "
         f"version {metadata.get('VERSION')} | entry {eboot['entry']}"
     )
+    dep = report["dependency_audit"]
+    print(f"Dependency audit: {dep['native_module_count']} native PRXs present; "
+          f"{dep['host_module_count']} system modules require host runtime/HLE; "
+          f"art={dep['payload']['art']} playgo={dep['payload']['playgo.pgm']}")
     print(
         f"{eboot['import_count']} eboot imports; "
         f"{len(named)} named by current runtime table; {len(unknown)} still unknown"
