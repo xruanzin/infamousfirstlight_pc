@@ -8,6 +8,7 @@ PATTERNS=[
  ("unsupported_import",re.compile(r"STOP: first unsupported PS4 import:\s*(\S+)")),
  ("guest_fault",re.compile(r"(?:Guest fault.*guest offset|Fault:.*guest offset)\s*(0x[0-9a-fA-F]+)")),
  ("driver_fault",re.compile(r"(amdvlk64\.dll|atio6axx\.dll|nvoglv64\.dll|nvwgf2umx\.dll)",re.I)),
+ ("gpu_assertion",re.compile(r"STOP: GPU library assertion failed")),
  ("watchdog",re.compile(r"STOP: watchdog timeout")),
  ("cpu",re.compile(r"STOP: unsupported CPU")),
 ]
@@ -35,6 +36,7 @@ def main()->int:
   "unsupported_import":"implement or bind the reported ABI contract; do not success-stub it blindly",
   "guest_fault":"inspect the reported guest offset and its inputs/last runtime calls",
   "driver_fault":"isolate the GPU command/resource path before changing guest semantics",
+  "gpu_assertion":"inspect the GPU errors immediately before the assertion; do not change guest CPU semantics",
   "watchdog":"inspect the emitted thread stacks for deadlock or an unserviced event",
   "cpu":"use the supported CPU path or extend the compatibility translator",
   "clean_exit":"the process exited cleanly; inspect the last milestone and why the game requested exit",
