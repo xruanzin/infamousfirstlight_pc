@@ -309,19 +309,24 @@ struct Image {
         return base_type;
     }
 
-    /// First Light/AMD: BC1-BC5 1D resources that are CPU-decoded are hosted as 2D images
-    /// of height 1 so amdvlk64.dll never takes its crashing 1D image-copy path.
-    bool IsDecodedBc1DHost2D() const noexcept {
+    /// First Light/AMD: guest 1D resources may be hosted as 2D images of height 1.
+    /// The broad mode matches the engine's 2D render-target / 1D sampled LUT aliasing.
+    bool IsHost1DAs2D() const noexcept {
         const auto type = GetType();
         const auto dfmt = GetDataFmt();
         const bool is_1d = type == ImageType::Color1D || type == ImageType::Color1DArray;
-        return BcTinyDecode() && is_1d &&
-               dfmt >= DataFormat::FormatBc1 && dfmt <= DataFormat::FormatBc5;
+        if (!is_1d) {
+            return false;
+        }
+        if (All1DAs2D()) {
+            return true;
+        }
+        return BcTinyDecode() && dfmt >= DataFormat::FormatBc1 && dfmt <= DataFormat::FormatBc5;
     }
 
     ImageType GetHostViewType(const bool is_array) const noexcept {
         const auto view = GetViewType(is_array);
-        if (IsDecodedBc1DHost2D()) {
+        if (IsHost1DAs2D()) {
             return view == ImageType::Color1DArray ? ImageType::Color2DArray : ImageType::Color2D;
         }
         return view;
