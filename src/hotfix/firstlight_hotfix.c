@@ -1,4 +1,5 @@
 /* Small native hotfix module for First Light.
+ * Hotfix ABI version 1: standalone SysV guest-callable overrides.
  *
  * Keep title-specific/simple ABI contracts here instead of growing bb-probe.exe.
  * The host loads this DLL dynamically and asks it first for overrides.
