@@ -109,15 +109,14 @@ jobs:
           git add $path
           if (-not (git diff --cached --quiet)) {
             git commit -m "runtime: refresh native core digest"
-            for attempt in 1 2 3; do
-              if git push origin HEAD:firstlight-bootstrap; then
-                break
-              fi
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              git push origin HEAD:firstlight-bootstrap
+              if ($LASTEXITCODE -eq 0) { break }
               git fetch origin firstlight-bootstrap
               git rebase origin/firstlight-bootstrap
               if ($LASTEXITCODE -ne 0) { throw "Failed to rebase core digest update" }
               if ($attempt -eq 3) { throw "Failed to publish core digest after retries" }
-            done
+            }
           }
 
       - uses: actions/upload-artifact@v4
