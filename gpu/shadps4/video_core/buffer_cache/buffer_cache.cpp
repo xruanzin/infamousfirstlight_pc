@@ -560,6 +560,10 @@ const Buffer* BufferCache::UploadCopies(const Buffer* arena, std::span<vk::Buffe
         return nullptr;
     }
     BbStats::buffer_upload_bytes.fetch_add(total_size_bytes, std::memory_order_relaxed);
+    if (total_size_bytes > MAX_UPLOAD_PART_BYTES) {
+        UploadInParts(arena, copies);
+        return nullptr;
+    }
     const auto staging = staging_pool.Request(total_size_bytes, MemoryType::HostUncached);
     // bbport: the guest memory is copied into staging on the copy threads, started now in
     // groups of about 1 MiB; submission and guest-visible fences wait for them
@@ -630,6 +634,56 @@ const Buffer* BufferCache::UploadCopies(const Buffer* arena, std::span<vk::Buffe
     }
     staging.Flush();
     return staging.buffer;
+}
+
+void BufferCache::UploadInParts(const Buffer* arena, std::span<const vk::BufferCopy> ranges) {
+    u64 total_bytes = 0;
+    for (const auto& range : ranges) {
+        total_bytes += range.size;
+    }
+    LOG_WARNING(Render_Vulkan, "Uploading {} MB in bounded {} MB staging parts",
+                total_bytes >> 20, MAX_UPLOAD_PART_BYTES >> 20);
+
+    u64 range_index = 0;
+    u64 range_done = 0;
+    u64 parts = 0;
+    while (range_index < ranges.size()) {
+        const auto staging =
+            staging_pool.Request(MAX_UPLOAD_PART_BYTES, MemoryType::HostUncached);
+        boost::container::small_vector<vk::BufferCopy, 16> part_copies;
+        u64 part_bytes = 0;
+
+        while (range_index < ranges.size() && part_bytes < MAX_UPLOAD_PART_BYTES) {
+            const auto& range = ranges[range_index];
+            const u64 remaining = range.size - range_done;
+            const u64 amount = std::min<u64>(remaining, MAX_UPLOAD_PART_BYTES - part_bytes);
+            const VAddr guest = range.dstOffset + range_done;
+
+            memory->CopySparseMemory(guest, staging.mapped + part_bytes, amount);
+            part_copies.push_back(vk::BufferCopy{
+                .srcOffset = staging.offset + part_bytes,
+                .dstOffset = guest - arena->cpu_addr,
+                .size = amount,
+            });
+            part_bytes += amount;
+            range_done += amount;
+            if (range_done == range.size) {
+                ++range_index;
+                range_done = 0;
+            }
+        }
+
+        staging.Flush();
+        runtime.CopyBuffer(staging.buffer, arena, part_copies);
+        ++parts;
+
+        // Reuse a bounded amount of staging memory.  Every part except the
+        // final one must be consumed before the next request can recycle it.
+        if (range_index < ranges.size()) {
+            scheduler.Finish();
+        }
+    }
+    LOG_INFO(Render_Vulkan, "Large guest upload completed in {} staging parts", parts);
 }
 
 bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size) {
