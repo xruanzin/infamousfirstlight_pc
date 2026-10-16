@@ -112,6 +112,7 @@ void runtime_report(void) {
     runtime_pad_report();
     runtime_savedata_report();
     runtime_file_report();
+    runtime_hotfix_report();
     printf("Runtime: memory operations=%zu\n", (size_t)memory_calls);
 }
 static ABI void init_env(void) {
@@ -238,6 +239,9 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
         if (same_nid(name, "ZT4ODD2Ts9o")) return (uintptr_t)&need_libc_internal;
         return 0;
     }
+    const char *hotfix_symbol=runtime_hotfix_symbol(name);
+    uintptr_t hotfix=runtime_hotfix_resolve(name,hotfix_symbol ? hotfix_symbol : runtime_symbol(name));
+    if (hotfix) return hotfix;
     /* Runtime-owned libc contracts are keyed by stable NID, not dump-local suffix. */
     if (same_nid(name, "bzQExy189ZI")) return (uintptr_t)init_env;
     if (same_nid(name, "8G2LB+A3rzg")) return (uintptr_t)guest_atexit;
@@ -294,6 +298,8 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
 }
 /* Symbol name for a scoped NID, or NULL when this eboot/libc never imports it. */
 const char *runtime_symbol(const char *nid) {
+    const char *hotfix=runtime_hotfix_symbol(nid);
+    if (hotfix) return hotfix;
     for (size_t i=0;i<sizeof(import_names)/sizeof(*import_names);++i)
         if (!strcmp(nid,import_names[i].nid)) return import_names[i].symbol;
     for (size_t i=0;i<sizeof(import_names)/sizeof(*import_names);++i)
