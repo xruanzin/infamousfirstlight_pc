@@ -128,6 +128,31 @@ static ABI int32_t addon_list(uint32_t service,void *list,uint32_t capacity,uint
     if (found!=reported) printf("Runtime: AppContent add-ons reported installed: %u\n",(unsigned)(reported=found));
     ++lists; return 0;
 }
+static ABI int32_t addon_info(uint32_t service,const char *label,AddonInfo *out) {
+    require_initialized();
+    if (service || !label || !out) return PARAMETER;
+    if (!label[0] || strnlen(label,LABEL_SIZE)>=LABEL_SIZE) return PARAMETER;
+    char labels[MAX_ADDONS][LABEL_SIZE];
+    uint32_t found=0;
+    char root[4096];
+    int fits=snprintf(root,sizeof(root),"%s/addcont",runtime_file_user_dir())<(int)sizeof(root);
+    DIR *titles=fits ? opendir(root) : NULL;
+    for (struct dirent *t; titles && (t=readdir(titles));) {
+        char title[4096];
+        if (t->d_name[0]=='.' || snprintf(title,sizeof(title),"%s/%s",root,t->d_name)>=(int)sizeof(title)) continue;
+        scan_labels(title,labels,&found);
+    }
+    if (titles) closedir(titles);
+    const char *dlc=getenv("BB_DLC_DIR");
+    if (dlc && *dlc) scan_labels(dlc,labels,&found);
+    for (uint32_t i=0;i<found;++i) if (!strcmp(labels[i],label)) {
+        memset(out,0,sizeof(*out));
+        memcpy(out->label,labels[i],strlen(labels[i]));
+        out->status=ADDON_INSTALLED;
+        return 0;
+    }
+    return (int32_t)0x80D90007; /* ORBIS_APP_CONTENT_ERROR_DRM_NO_ENTITLEMENT */
+}
 uintptr_t runtime_content_resolve(const char *name) {
     if (!strcmp(name,"g8cM39EUZ6o#M#N")) return (uintptr_t)module_load;
     if (!strcmp(name,"fMP5NHUOaMk#M#N")) return (uintptr_t)module_loaded;
@@ -135,6 +160,7 @@ uintptr_t runtime_content_resolve(const char *name) {
     if (!strcmp(name,"R9lA82OraNs#c#d")) return (uintptr_t)content_init;
     if (!strcmp(name,"99b82IKXpH4#c#d")) return (uintptr_t)param_int;
     if (!strcmp(name,"xnd8BJzAxmk#c#d")) return (uintptr_t)addon_list;
+    if (!strcmp(name,"m47juOmH0VE")) return (uintptr_t)addon_info;
     return 0;
 }
 void runtime_content_report(void) {
