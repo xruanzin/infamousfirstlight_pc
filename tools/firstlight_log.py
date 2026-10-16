@@ -39,6 +39,8 @@ def main()->int:
  last_resource=resource_lines[-1] if resource_lines else None
  bcn_lines=[line for line in lines if "BCN CAPABILITY" in line or "BCN COPY DEBUG" in line]
  last_bcn= bcn_lines[-1] if bcn_lines else None
+ submit_lines=[line for line in lines if line.startswith("GPU: FL submit #")]
+ last_submit=submit_lines[-1] if submit_lines else None
  # Preserve a compact crash tail in the machine-readable diagnosis so the next iteration does
  # not depend on a second file just to identify the call immediately preceding the fault.
  crash_tail=lines[-32:]
@@ -56,7 +58,8 @@ def main()->int:
  }[stop["kind"]]
  report={"exit_code":a.exit_code,"stop":stop,"milestones":milestones,"next_action":next_action,
          "last_gpu_upload":last_upload,"last_gpu_resource":last_resource,
-         "last_bcn_event":last_bcn,"crash_tail":crash_tail,"log":str(a.log)}
+         "last_gpu_submit":last_submit,"last_bcn_event":last_bcn,
+         "crash_tail":crash_tail,"log":str(a.log)}
  a.out.parent.mkdir(parents=True,exist_ok=True)
  a.out.write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
  print(f"Boot stage: {', '.join(milestones) if milestones else 'pre-entry/unknown'}")
