@@ -773,6 +773,15 @@ static ABI int32_t pad_vibration(int32_t handle, const uint8_t *param) {
     pthread_mutex_unlock(&lock);
     return 0;
 }
+static ABI int32_t pad_lightbar(int32_t handle,const uint8_t *rgb) {
+    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    if (!rgb) return ERR_INVALID_ARG;
+    pthread_mutex_lock(&lock);
+    SDL_Gamepad *g=current_gamepad();
+    if (g) SDL_SetGamepadLED(g,rgb[0],rgb[1],rgb[2]);
+    pthread_mutex_unlock(&lock);
+    return 0;
+}
 static ABI int32_t pad_ok_handle(int32_t handle) { return handle==PAD_HANDLE && opened ? 0 : ERR_INVALID_HANDLE; }
 static ABI int32_t pad_ok_handle_flag(int32_t handle, uint8_t flag) { (void)flag; return pad_ok_handle(handle); }
 
@@ -780,6 +789,7 @@ static const RuntimeExport exports[]={
     {"scePadInit",pad_init}, {"scePadOpen",pad_open}, {"scePadClose",pad_close},
     {"scePadReadState",pad_read_state}, {"scePadRead",pad_read},
     {"scePadGetControllerInformation",pad_info}, {"scePadSetVibration",pad_vibration},
+    {"scePadSetLightBar",pad_lightbar},
     {"scePadResetOrientation",pad_ok_handle},
     {"scePadSetAngularVelocityDeadbandState",pad_ok_handle_flag}, {"scePadSetTiltCorrectionState",pad_ok_handle_flag},
     {"scePadSetMotionSensorState",pad_ok_handle_flag},
