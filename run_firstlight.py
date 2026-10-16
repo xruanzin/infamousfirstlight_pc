@@ -199,6 +199,7 @@ def main() -> int:
     # CUSA00575 until that path is proven safe; FL_VK_RECORD_THREAD=1 re-enables it for A/B.
     env["BB_VK_RECORD_THREAD"] = env.get("FL_VK_RECORD_THREAD", "0")
     env.setdefault("FL_GPU_UPLOAD_TRACE", "1")
+    env.setdefault("FL_ALL_1D_AS_2D", "1")
     if args.import_trace is not None:
         if args.import_trace < 0:
             fail("--import-trace must be zero or greater")
@@ -303,9 +304,9 @@ def main() -> int:
     log_path = user / "last_run.log"
     header = (
         f"inFAMOUS First Light native bootstrap\n"
-        f"compat_revision=amd-copy-isolation-v1\n"
+        f"compat_revision=amd-copy-isolation-v2-all1d2d\n"
         f"title_id=CUSA00575 version=01.00\n"
-        f"vk_record_thread={env.get('BB_VK_RECORD_THREAD')} upload_trace={env.get('FL_GPU_UPLOAD_TRACE')}\n"
+        f"vk_record_thread={env.get('BB_VK_RECORD_THREAD')} upload_trace={env.get('FL_GPU_UPLOAD_TRACE')} all_1d_as_2d={env.get('FL_ALL_1D_AS_2D')}\n"
         f"game={game}\n"
         f"probe={probe}\n"
         f"started={time.strftime('%Y-%m-%d %H:%M:%S')}\n"
