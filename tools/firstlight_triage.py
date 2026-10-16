@@ -92,6 +92,36 @@ def dynamic_info(path: Path) -> dict:
     }
 
 
+FS_LOAD_ANY = re.compile(
+    rb'\x64([\x48\x4c])\x8b([\x04\x0c\x14\x1c\x24\x2c\x34\x3c])\x25\x00\x00\x00\x00'
+)
+
+def tls_loads(path: Path) -> dict:
+    source=path.read_bytes()
+    elf,_header,ph,_segments,_missing=parse_self(source)
+    counts=collections.Counter()
+    for p in ph:
+        if p["type"] != 1 or not p["flags"] & 1 or not p["filesz"]:
+            continue
+        code=span(elf,p["offset"],p["filesz"])
+        for match in FS_LOAD_ANY.finditer(code):
+            rex=match.group(1)[0]
+            modrm=match.group(2)[0]
+            reg=(modrm >> 3) & 7
+            if rex == 0x4c:
+                reg += 8
+            names=("rax","rcx","rdx","rbx","rsp","rbp","rsi","rdi",
+                   "r8","r9","r10","r11","r12","r13","r14","r15")
+            counts[names[reg]] += 1
+    return {
+        "total":sum(counts.values()),
+        "rax":counts.get("rax",0),
+        "non_rax":sum(counts.values())-counts.get("rax",0),
+        "by_register":dict(sorted(counts.items())),
+        "note":"Every entry must be rewritten from FS to guest GS/TLS; rax-only patching is insufficient.",
+    }
+
+
 def known_nids() -> dict[str, str]:
     path = ROOT / "src" / "import_names.inc"
     if not path.is_file():
@@ -148,7 +178,7 @@ def main() -> int:
             "content_id": metadata.get("CONTENT_ID"),
             "system_ver": metadata.get("SYSTEM_VER"),
         },
-        "eboot": eboot,
+        "eboot": {**eboot, "thread_pointer_loads": tls_loads(required["eboot"])},
         "libc": {
             **libc,
             "init_env_is_ret": bool(libc_evidence.get("init_env_is_ret")),
@@ -182,6 +212,8 @@ def main() -> int:
         f"{eboot['import_count']} eboot imports; "
         f"{len(named)} named by current runtime table; {len(unknown)} still unknown"
     )
+    tls=tls_loads(required["eboot"])
+    print(f"Guest TLS loads: {tls['total']} total; {tls['non_rax']} use registers other than rax")
     print(f"libc _init_env is RET: {libc_evidence.get('init_env_is_ret', False)}")
     print(f"Report: {args.out.resolve()}")
     return 0
