@@ -117,6 +117,13 @@ ImageView::ImageView(const Vulkan::Instance& instance, const ImageViewInfo& info
         aspect = vk::ImageAspectFlagBits::eStencil;
     }
 
+    // First Light AMD fallback: descriptors still describe BC guest memory, while the
+    // host image contains decoded texels. Match the view to the decoded host format.
+    if (image.info.props.is_bc_decoded) {
+        const vk::Format decoded = BcTinyDecodedFormat(format);
+        format = decoded != vk::Format::eUndefined ? decoded : image.info.pixel_format;
+    }
+
     // bbport: storage writes never convert to sRGB and sRGB formats cannot be storage images
     // (AMD's driver loses the device on such a view; NVIDIA tolerates it): write through the
     // UNORM format, which stores the same bytes.
