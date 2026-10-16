@@ -93,13 +93,28 @@ copies game code into the repository.
 
 ## Current import picture
 
-For v1.00, before linking native modules, the CUSA00575 eboot has 468 imports. v1.04 has 510 imports, so runtime coverage must be measured independently for the updated executable.  The
-Bloodborne-derived name table already recognizes 366 stable NIDs.  The
-remaining 102 are title-specific gaps in the current table.
+v1.00 has 468 eboot imports. v1.04 has 510 and is an ABI revision in its own
+right: compared with v1.00 it adds 91 stable NIDs and removes 49.
 
-A large part of that apparent gap is not a host-runtime problem: 22 of the
-unknown eboot NIDs belong to `libSceFios2`, which is linked as native guest
-code by `scripts/link_modules.py`.
+Only 7 of those 91 newly introduced NIDs are already named by the current
+host table (`sceGnmMapComputeQueueWithPriority`, `sceGnmUpdateHsShader`,
+`sceGnmUpdateVsShader`, `sceGnmUpdateGsShader`,
+`sceVideoOutGetFlipStatus`, `scePthreadYield`, and `sceNpGetOnlineId`).
+The current table therefore names about 325 of the 510 v1.04 imports before
+native PRX linkage and host/GPU runtime resolution; roughly 185 remain unnamed
+at this metadata stage.
+
+That count is deliberately *not* treated as a list of functions to success-stub.
+Imports provided by linked native modules or by GPU/runtime HLE can disappear
+from the effective gap, and the first actually-called unresolved ABI remains
+the authoritative bring-up failure. v1.04 enables one-call import tracing by
+default for that reason.
+
+The update also introduces `libSceJson2.prx`, while its updated libc/Fios
+dependencies reference `libSceLibcInternal.prx` and Sysmodule. These are
+reported as system-module dependencies unless a user-owned native module is
+present; the bootstrap does not pretend that a missing firmware PRX is a
+missing game payload.
 
 The next bootstrap milestone is therefore:
 
