@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "bbport_toggles.h"
+#include <cstdio>
+#include <cstdlib>
 #include <ranges>
 #include "common/assert.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
@@ -18,6 +20,14 @@ namespace VideoCore {
 using namespace Vulkan;
 
 Common::IncrementalIdProvider<u64> Image::global_image_uid{};
+
+static bool FlGpuResourceTrace() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("FL_GPU_RESOURCE_TRACE");
+        return value && value[0] == '1';
+    }();
+    return enabled;
+}
 
 static vk::ImageUsageFlags ImageUsageFlags(const Vulkan::Instance& instance,
                                            const ImageInfo& info) {
@@ -118,8 +128,22 @@ void UniqueImage::Create(const vk::ImageCreateInfo& image_ci) {
     const VkImageCreateInfo image_ci_unsafe = static_cast<VkImageCreateInfo>(image_ci);
     VkImage unsafe_image{};
     VmaAllocationInfo alloc_info{};
+    if (FlGpuResourceTrace()) {
+        std::printf("GPU: FL resource vmaCreateImage begin type=%u format=%u extent=%ux%ux%u mips=%u layers=%u usage=0x%x flags=0x%x\\n",
+                    image_ci_unsafe.imageType, image_ci_unsafe.format,
+                    image_ci_unsafe.extent.width, image_ci_unsafe.extent.height,
+                    image_ci_unsafe.extent.depth, image_ci_unsafe.mipLevels,
+                    image_ci_unsafe.arrayLayers, image_ci_unsafe.usage, image_ci_unsafe.flags);
+        std::fflush(stdout);
+    }
     VkResult result = vmaCreateImage(allocator, &image_ci_unsafe, &alloc_ci, &unsafe_image,
                                      &allocation, &alloc_info);
+    if (FlGpuResourceTrace()) {
+        std::printf("GPU: FL resource vmaCreateImage end result=%d image=%p allocation=%p\\n",
+                    int(result), reinterpret_cast<void*>(unsafe_image),
+                    reinterpret_cast<void*>(allocation));
+        std::fflush(stdout);
+    }
     if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
         // bbport: VRAM full (6 GB cards, high resolutions). Past the budget the driver keeps the
         // image in system memory, which is slower but no crash.
@@ -176,8 +200,24 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
         .usage = usage_flags,
         .flags = flags,
     };
+    if (FlGpuResourceTrace()) {
+        std::printf("GPU: FL resource #%llu format-query begin guest=0x%llx guestType=%u hostType=%u format=%s size=%ux%ux%u mips=%u layers=%u host2d=%u decoded=%u usage=0x%x flags=0x%x\\n",
+                    static_cast<unsigned long long>(image_uid),
+                    static_cast<unsigned long long>(info.guest_address), u32(info.type),
+                    u32(format_info.type), vk::to_string(supported_format).c_str(),
+                    info.size.width, info.size.height, info.size.depth, info.resources.levels,
+                    info.resources.layers, info.props.is_host_2d ? 1u : 0u,
+                    info.props.is_bc_decoded ? 1u : 0u, u32(usage_flags), u32(flags));
+        std::fflush(stdout);
+    }
     auto image_format_properties =
         instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
+    if (FlGpuResourceTrace()) {
+        std::printf("GPU: FL resource #%llu format-query end result=%s\\n",
+                    static_cast<unsigned long long>(image_uid),
+                    vk::to_string(image_format_properties.result).c_str());
+        std::fflush(stdout);
+    }
     // bbport: storage usage is speculative (see ImageUsageFlags). Drivers that refuse it for a
     // format (AMD's Windows driver for BC6H) get the image without it: creating the unsupported
     // combination anyway loses the device a few frames later.
@@ -221,7 +261,18 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
     backing = &backing_images.emplace_back();
     backing->num_samples = info.num_samples;
     backing->image = UniqueImage{instance.GetDevice(), instance.GetAllocator()};
+    if (FlGpuResourceTrace()) {
+        std::printf("GPU: FL resource #%llu image-create begin\\n",
+                    static_cast<unsigned long long>(image_uid));
+        std::fflush(stdout);
+    }
     backing->image.Create(image_ci);
+    if (FlGpuResourceTrace()) {
+        std::printf("GPU: FL resource #%llu image-create end handle=%p\\n",
+                    static_cast<unsigned long long>(image_uid),
+                    reinterpret_cast<void*>(static_cast<VkImage>(backing->image)));
+        std::fflush(stdout);
+    }
 
     Vulkan::SetObjectName(instance.GetDevice(), GetImage(),
                           "Image {}x{}x{} {} {} {:#x}:{:#x} L:{} M:{} S:{}", info.size.width,
