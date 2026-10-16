@@ -15,11 +15,15 @@ jobs:
         with:
           python-version: "3.11"
       - name: Python syntax
+        run: python -m py_compile run_firstlight.py tools/firstlight_triage.py tools/firstlight_coverage.py scripts/prepare.py scripts/link_modules.py scripts/content_profile.py
+      - name: Install SDL3 headers
         run: |
-          python -m py_compile             run_firstlight.py             tools/firstlight_triage.py             tools/firstlight_coverage.py             scripts/prepare.py             scripts/link_modules.py             scripts/content_profile.py
-      - name: Pure runtime syntax
+          sudo apt-get update
+          sudo apt-get install -y libsdl3-dev
+      - name: Runtime syntax
         run: |
-          cc -std=c11 -Wall -Wextra -Werror -Isrc -fsyntax-only             src/runtime_eventflag.c             src/runtime_content.c
+          cc -std=c11 -Wall -Wextra -Werror -I. -Isrc -fsyntax-only src/runtime_eventflag.c src/runtime_content.c
+          cc -std=c11 -Wall -Wextra -Werror -I. -Isrc $(pkg-config --cflags sdl3) -fsyntax-only src/runtime_services.c src/runtime_pad.c
       - name: Bootstrap tools load
         run: |
           python tools/firstlight_triage.py --help >/dev/null
