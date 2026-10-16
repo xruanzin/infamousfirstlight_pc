@@ -99,8 +99,8 @@ static vk::FormatFeatureFlags2 FormatFeatureFlags(const vk::ImageUsageFlags usag
     return feature_flags;
 }
 
-static vk::Result QueryImageSupport(const Vulkan::Instance& instance, const ImageInfo& info,
-                                    vk::ImageType image_type, vk::Format format,
+static vk::Result QueryImageSupport(const Vulkan::Instance& instance, vk::ImageType image_type,
+                                    vk::Format format,
                                     vk::ImageUsageFlags usage, vk::ImageCreateFlags flags) {
     const vk::PhysicalDeviceImageFormatInfo2 query{
         .format = format,
@@ -143,7 +143,7 @@ bool ApplyBc1DCapabilityFallback(const Vulkan::Instance& instance, ImageInfo& in
     const auto guest_format =
         instance.GetSupportedFormat(info.pixel_format, FormatFeatureFlags(guest_usage));
     const auto native_result =
-        QueryImageSupport(instance, info, vk::ImageType::e1D, guest_format, guest_usage, guest_flags);
+        QueryImageSupport(instance, vk::ImageType::e1D, guest_format, guest_usage, guest_flags);
 
     if (native_result == vk::Result::eSuccess) {
         return false;
@@ -161,7 +161,7 @@ bool ApplyBc1DCapabilityFallback(const Vulkan::Instance& instance, ImageInfo& in
     const vk::ImageCreateFlags host_flags{vk::ImageCreateFlagBits::eMutableFormat |
                                           vk::ImageCreateFlagBits::eExtendedUsage};
     const auto fallback_result =
-        QueryImageSupport(instance, candidate, vk::ImageType::e2D, host_format, host_usage, host_flags);
+        QueryImageSupport(instance, vk::ImageType::e2D, host_format, host_usage, host_flags);
 
     LOG_WARNING(Render_Vulkan,
                 "BCN CAPABILITY: guest={:#x} {} 1D {}x{} layers={} native={} -> host={} 2D "
