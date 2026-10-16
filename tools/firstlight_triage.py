@@ -26,6 +26,38 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from prepare import inspect_libc, parse_self, sfo, span, unpack  # noqa: E402
 
+KNOWN_REVISIONS = {
+    "01.00": {
+        "eboot": "155bd094caa24d2581de0c01d961e5847718d4caf120fa1ec8841e5522ae899b",
+        "libc": "4a79a8c369faa3a510b3510128afa33b3e676a1f0812a598f8386a1835093553",
+        "fios": "809348c72e4a3a52511a55a7ebef7bcde925c20b0a02ba906831f66722fbe794",
+    },
+    "01.04": {
+        "eboot": "693dc18504f30ae106bcd33cbb0c1d29a3dbbdb330754ee9dc2194ca6b56e240",
+        "libc": "9e8096d917f986a63e2f829f01d18acac7828914a7a18e34fb616faf97cc18af",
+        "fios": "395cf34b614e3236f399cede658f75863efdec7a332d401011222ee9026696c2",
+    },
+}
+
+def revision_fingerprint(eboot_sha: str, libc_sha: str, fios_sha: str) -> dict:
+    matches = {
+        version: {
+            "eboot": eboot_sha == hashes["eboot"],
+            "libc": libc_sha == hashes["libc"],
+            "fios": fios_sha == hashes["fios"],
+        }
+        for version, hashes in KNOWN_REVISIONS.items()
+    }
+    exact = next((version for version, parts in matches.items() if all(parts.values())), None)
+    partial = [version for version, parts in matches.items() if any(parts.values()) and not all(parts.values())]
+    return {
+        "exact_revision": exact,
+        "partial_revision_matches": partial,
+        "matches": matches,
+        "mixed_revision_warning": bool(partial) and exact is None,
+        "note": "Fingerprints are observed CUSA00575 dumps; unknown hashes are reported, not rejected.",
+    }
+
 
 def dynamic_info(path: Path) -> dict:
     source = path.read_bytes()
@@ -181,7 +213,10 @@ def main() -> int:
     def payload_present(name: str) -> bool:
         return (game / name).exists() or (game / "dvdroot_ps4" / name).exists()
 
+    revision = revision_fingerprint(eboot["sha256"], libc["sha256"], fios["sha256"])
+
     report = {
+        "revision_fingerprint": revision,
         "target": {
             "title": metadata.get("TITLE"),
             "title_id": metadata.get("TITLE_ID"),
@@ -230,6 +265,9 @@ def main() -> int:
         f"{metadata.get('TITLE')} | {metadata.get('TITLE_ID')} | "
         f"version {metadata.get('VERSION')} | entry {eboot['entry']}"
     )
+    rev = report["revision_fingerprint"]
+    print(f"Revision fingerprint: {rev['exact_revision'] or 'unknown/mixed'}"
+          + (" (WARNING: mixed base/update files)" if rev["mixed_revision_warning"] else ""))
     dep = report["dependency_audit"]
     print(f"Dependency audit: {dep['native_module_count']} native PRXs present; "
           f"{dep['host_module_count']} system modules require host runtime/HLE; "
