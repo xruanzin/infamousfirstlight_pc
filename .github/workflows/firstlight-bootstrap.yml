@@ -17,7 +17,7 @@ jobs:
       - name: Python syntax
         run: python -m py_compile run_firstlight.py tools/firstlight_triage.py tools/firstlight_coverage.py scripts/prepare.py scripts/link_modules.py scripts/content_profile.py
       - name: Pure runtime syntax
-        run: cc -std=c11 -Wall -Wextra -Werror -I. -Isrc -fsyntax-only src/runtime_eventflag.c src/runtime_content.c
+        run: cc -std=c11 -Wall -Wextra -Werror -I. -Isrc -fsyntax-only src/runtime_eventflag.c src/runtime_content.c src/runtime_file.c
       - name: Bootstrap tools load
         run: |
           python tools/firstlight_triage.py --help >/dev/null
