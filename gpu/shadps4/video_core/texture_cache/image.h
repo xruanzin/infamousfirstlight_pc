@@ -37,6 +37,13 @@ enum ImageFlagBits : u32 {
 };
 DECLARE_ENUM_FLAG_OPERATORS(ImageFlagBits)
 
+/**
+ * Query the host for the guest BC1-BC5 1D representation before image creation.
+ * If Vulkan rejects that exact combination, preserve guest layout/semantics but
+ * switch the host representation to a decoded 2D image of height 1.
+ */
+bool ApplyBc1DCapabilityFallback(const Vulkan::Instance& instance, ImageInfo& info);
+
 struct UniqueImage {
     explicit UniqueImage() = default;
     explicit UniqueImage(vk::Device device, VmaAllocator allocator)
