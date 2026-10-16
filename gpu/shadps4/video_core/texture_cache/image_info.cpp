@@ -125,6 +125,7 @@ ImageInfo::ImageInfo(const AmdGpu::Image& image, const Shader::ImageResource& de
         props.is_depth = true;
     }
     type = image.GetBaseType();
+    props.is_host_2d = image.IsDecodedBc1DHost2D();
     props.is_tiled = image.IsTiled();
     props.is_volume = type == AmdGpu::ImageType::Color3D;
     props.is_pow2 = image.pow2pad;
