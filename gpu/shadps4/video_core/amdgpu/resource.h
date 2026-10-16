@@ -6,6 +6,7 @@
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "common/bit_field.h"
+#include "video_core/amdgpu/bc_tiny.h"
 #include "video_core/amdgpu/pixel_format.h"
 #include "video_core/amdgpu/tiling.h"
 
@@ -306,6 +307,24 @@ struct Image {
             return ImageType::Color2D;
         }
         return base_type;
+    }
+
+    /// First Light/AMD: BC1-BC5 1D resources that are CPU-decoded are hosted as 2D images
+    /// of height 1 so amdvlk64.dll never takes its crashing 1D image-copy path.
+    bool IsDecodedBc1DHost2D() const noexcept {
+        const auto type = GetType();
+        const auto dfmt = GetDataFmt();
+        const bool is_1d = type == ImageType::Color1D || type == ImageType::Color1DArray;
+        return BcTinyDecode() && is_1d &&
+               dfmt >= DataFormat::FormatBc1 && dfmt <= DataFormat::FormatBc5;
+    }
+
+    ImageType GetHostViewType(const bool is_array) const noexcept {
+        const auto view = GetViewType(is_array);
+        if (IsDecodedBc1DHost2D()) {
+            return view == ImageType::Color1DArray ? ImageType::Color2DArray : ImageType::Color2D;
+        }
+        return view;
     }
 
     ImageType GetViewType(const bool is_array) const noexcept {
