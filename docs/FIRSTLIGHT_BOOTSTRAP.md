@@ -1,11 +1,13 @@
 # inFAMOUS First Light native bootstrap
 
-Target: **inFAMOUS First Light — CUSA00575 — version 1.00**.
+Target: **inFAMOUS First Light — CUSA00575 — versions 1.00 and 1.04**.
 
 This branch is the first title-specific bootstrap of the Bloodborne native-port
 base.  It does **not** contain game files and it is not yet a playable port.
 
-## Confirmed from a decrypted CUSA00575 v1.00 dump
+## Confirmed game revisions
+
+### CUSA00575 v1.00
 
 - PS4 executable format: plaintext x86-64 SELF/ELF
 - guest entry point: `0xA19C30`
@@ -24,6 +26,35 @@ base.  It does **not** contain game files and it is not yet a playable port.
 The eboot declares 32 required PRX modules, including GNM, VideoOut,
 Videodec, AudioOut, AJM, Pad, SaveData, Fios2, PlayGo, system services and NP
 libraries.
+
+
+### CUSA00575 v1.04
+
+The update is a real executable/runtime revision rather than metadata-only:
+
+- eboot SHA-256: `693dc18504f30ae106bcd33cbb0c1d29a3dbbdb330754ee9dc2194ca6b56e240`
+- eboot bytes: 18,185,397
+- guest entry point: `0x6FFD70`
+- loaded eboot image: 136,535,375 bytes
+- program headers: 11
+- eboot imports: 510
+- eboot relocations observed:
+  - type 8: 97,810
+  - type 7: 504
+  - type 1: 446
+- `libSceGnmDriver_padebug.prx` changes to `libSceGnmDriver.prx`.
+- `libSceJson2.prx` is newly required by the updated eboot.
+- updated `libc.prx`: 1,057,666 bytes, 84 imports, and now declares
+  `libSceLibcInternal.prx` in addition to libkernel/Fios2.
+- updated `libSceFios2.prx`: 451,057 bytes, 81 imports, and now also declares
+  `libSceSysmodule.prx`.
+- the updated libc `_init_env` remains exactly one `RET`, so the native
+  loader safety assumption still holds.
+
+The triage tool fingerprints the known v1.00 and v1.04 eboot/libc/Fios2 sets
+and reports a mixed-revision warning if a base executable is accidentally
+combined with update PRXs (or the reverse). Unknown hashes are reported rather
+than rejected.
 
 ## Important compatibility change
 
@@ -62,7 +93,7 @@ copies game code into the repository.
 
 ## Current import picture
 
-Before linking native modules, the CUSA00575 eboot has 468 imports.  The
+For v1.00, before linking native modules, the CUSA00575 eboot has 468 imports. v1.04 has 510 imports, so runtime coverage must be measured independently for the updated executable.  The
 Bloodborne-derived name table already recognizes 366 stable NIDs.  The
 remaining 102 are title-specific gaps in the current table.
 
