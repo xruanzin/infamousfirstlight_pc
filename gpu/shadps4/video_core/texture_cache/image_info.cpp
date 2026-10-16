@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdio>
+#include <cstdlib>
 #include "common/assert.h"
 #include "core/libraries/kernel/process.h"
 #include "core/libraries/videoout/buffer.h"
@@ -141,6 +143,25 @@ ImageInfo::ImageInfo(const AmdGpu::Image& image, const Shader::ImageResource& de
     pitch = image.Pitch();
     resources.levels = image.NumLevels();
     resources.layers = image.NumLayers();
+
+    // First Light AMD A/B: PS4 POW2_PAD describes guest layout, but Vulkan does not require
+    // arrayLayers to be a power of two. Keep guest resources.layers padded for tiling/offsets,
+    // while optionally creating the host image with only the descriptor-addressable cube faces.
+    static const bool fl_cube_exact_layers = [] {
+        const char* value = std::getenv("FL_CUBE_ARRAY_EXACT_LAYERS");
+        return value && value[0] == '1';
+    }();
+    if (fl_cube_exact_layers && image.IsCube() && image.pow2pad) {
+        const u32 exact_layers = (static_cast<u32>(image.depth) + 1u) * 6u;
+        if (exact_layers != 0 && exact_layers < resources.layers) {
+            host_layers = exact_layers;
+            std::printf(
+                "GPU: FL cube exact-layers guest=0x%llx padded=%u host=%u cubes=%u\n",
+                static_cast<unsigned long long>(image.Address()), resources.layers, host_layers,
+                exact_layers / 6u);
+            std::fflush(stdout);
+        }
+    }
     num_samples = image.NumSamples();
     num_bits = NumBitsPerBlock(image.GetDataFmt());
     bank_swizzle = image.GetBankSwizzle();
