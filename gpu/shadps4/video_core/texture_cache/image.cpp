@@ -171,7 +171,7 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
     const auto supported_format = instance.GetSupportedFormat(info.pixel_format, format_features);
     vk::PhysicalDeviceImageFormatInfo2 format_info{
         .format = supported_format,
-        .type = ConvertImageType(info.type),
+        .type = info.props.is_host_2d ? vk::ImageType::e2D : ConvertImageType(info.type),
         .tiling = tiling,
         .usage = usage_flags,
         .flags = flags,
@@ -203,7 +203,7 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
 
     const vk::ImageCreateInfo image_ci = {
         .flags = flags,
-        .imageType = ConvertImageType(info.type),
+        .imageType = info.props.is_host_2d ? vk::ImageType::e2D : ConvertImageType(info.type),
         .format = supported_format,
         .extent{
             .width = info.size.width,
