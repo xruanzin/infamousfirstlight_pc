@@ -24,7 +24,8 @@ static vk::ImageType ConvertImageType(AmdGpu::ImageType type) noexcept {
     switch (type) {
     case AmdGpu::ImageType::Color1D:
     case AmdGpu::ImageType::Color1DArray:
-        return AmdGpu::All1DAs2D() ? vk::ImageType::e2D : vk::ImageType::e1D;
+        // Guest Color1D remains Vulkan 1D unless an ImageInfo explicitly selects a host fallback.
+        return vk::ImageType::e1D;
     case AmdGpu::ImageType::Color2D:
     case AmdGpu::ImageType::Color2DMsaa:
     case AmdGpu::ImageType::Color2DArray:
