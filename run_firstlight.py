@@ -16,8 +16,9 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import runpy
 
-PORT = Path(__file__).resolve().parent
+PORT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 SCRIPTS = PORT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
@@ -45,12 +46,31 @@ def creation_flags(console: bool) -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
-def run_tool(script: str, *args: object, env: dict[str, str]) -> None:
-    command = [sys.executable, str(SCRIPTS / script), *map(str, args)]
+def python_command(path: Path, *args: object) -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--script", str(path), *map(str, args)]
+    return [sys.executable, str(path), *map(str, args)]
+
+
+def run_python(path: Path, *args: object, env: dict[str, str], capture: bool = False) -> subprocess.CompletedProcess[str]:
+    command = python_command(path, *args)
     print("+", subprocess.list2cmdline(command))
-    result = subprocess.run(command, env=env)
+    result = subprocess.run(
+        command,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.STDOUT if capture else None,
+    )
     if result.returncode:
-        fail(f"{script} failed with exit code {result.returncode}")
+        if capture and result.stdout:
+            print(result.stdout, end="")
+        fail(f"{path.name} failed with exit code {result.returncode}")
+    return result
+
+
+def run_tool(script: str, *args: object, env: dict[str, str]) -> None:
+    run_python(SCRIPTS / script, *args, env=env)
 
 
 def metadata(game: Path) -> dict:
@@ -184,10 +204,12 @@ def main() -> int:
     print(f"User/logs: {user}")
 
     run_tool("prepare.py", game, "--out", out, env=env)
-    subprocess.run(
-        [sys.executable, str(PORT / "tools" / "firstlight_triage.py"), str(game), "--out", str(out / "firstlight-triage.json")],
+    run_python(
+        PORT / "tools" / "firstlight_triage.py",
+        game,
+        "--out",
+        out / "firstlight-triage.json",
         env=env,
-        check=True,
     )
 
     module_args = ["libc.prx", "libSceFios2.prx"]
@@ -199,16 +221,14 @@ def main() -> int:
         if not (game / "sce_module" / name).is_file():
             fail(f"requested linked module is missing: sce_module/{name}")
     run_tool("link_modules.py", game, "--out", out, "--modules", *module_args, env=env)
-    coverage_cmd = [
-        sys.executable,
-        str(PORT / "tools" / "firstlight_coverage.py"),
+    run_python(
+        PORT / "tools" / "firstlight_coverage.py",
         "--link",
-        str(out / "link.json"),
+        out / "link.json",
         "--out",
-        str(out / "firstlight-coverage.json"),
-    ]
-    print("+", subprocess.list2cmdline(coverage_cmd))
-    subprocess.run(coverage_cmd, env=env, check=True)
+        out / "firstlight-coverage.json",
+        env=env,
+    )
     run_tool("content_profile.py", game, "--out", out, "--sku", env["BB_CONTENT_SKU"], env=env)
     bootstrap_summary(out, values)
 
@@ -288,8 +308,29 @@ def main() -> int:
     return result_code
 
 
+def frozen_script_dispatch() -> None:
+    """Allow the frozen runner to execute the external preparation scripts.
+
+    The packaged build keeps scripts/ and tools/ beside the EXE.  Child runs of
+    this same EXE use --script <path> so players do not need a Python install.
+    """
+    if not getattr(sys, "frozen", False) or len(sys.argv) < 3 or sys.argv[1] != "--script":
+        return
+    path = Path(sys.argv[2]).resolve()
+    try:
+        path.relative_to(PORT)
+    except ValueError:
+        fail(f"refusing to execute script outside the port directory: {path}")
+    if not path.is_file() or path.suffix.lower() != ".py":
+        fail(f"bootstrap script not found: {path}")
+    sys.argv = [str(path), *sys.argv[3:]]
+    runpy.run_path(str(path), run_name="__main__")
+    raise SystemExit(0)
+
+
 if __name__ == "__main__":
     try:
+        frozen_script_dispatch()
         raise SystemExit(main())
     except KeyboardInterrupt:
         raise SystemExit(130)
