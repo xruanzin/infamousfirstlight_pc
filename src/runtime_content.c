@@ -154,16 +154,16 @@ static ABI int32_t addon_info(uint32_t service,const char *label,AddonInfo *out)
     }
     return (int32_t)0x80D90007; /* ORBIS_APP_CONTENT_ERROR_DRM_NO_ENTITLEMENT */
 }
-uintptr_t runtime_content_resolve(const char *name) {
-    if (!strcmp(name,"g8cM39EUZ6o#M#N")) return (uintptr_t)module_load;
-    if (!strcmp(name,"fMP5NHUOaMk#M#N")) return (uintptr_t)module_loaded;
-    if (!strcmp(name,"eR2bZFAAU0Q#M#N")) return (uintptr_t)module_unload;
-    if (!strcmp(name,"R9lA82OraNs#c#d")) return (uintptr_t)content_init;
-    if (!strcmp(name,"99b82IKXpH4#c#d")) return (uintptr_t)param_int;
-    if (!strcmp(name,"xnd8BJzAxmk#c#d")) return (uintptr_t)addon_list;
-    if (!strcmp(name,"m47juOmH0VE")) return (uintptr_t)addon_info;
-    return 0;
-}
+static const RuntimeExport exports[]={
+    {"sceSysmoduleLoadModule",module_load},
+    {"sceSysmoduleIsLoaded",module_loaded},
+    {"sceSysmoduleUnloadModule",module_unload},
+    {"sceAppContentInitialize",content_init},
+    {"sceAppContentAppParamGetInt",param_int},
+    {"sceAppContentGetAddcontInfoList",addon_list},
+    {"sceAppContentGetAddcontInfo",addon_info},
+};
+uintptr_t runtime_content_resolve(const char *name) { return RUNTIME_LOOKUP(exports,name); }
 void runtime_content_report(void) {
     printf("Runtime: AppContent references=%u, initialized=%u, parameter queries=%u, list queries=%u\n",refs,initialized,queries,lists);
 }
