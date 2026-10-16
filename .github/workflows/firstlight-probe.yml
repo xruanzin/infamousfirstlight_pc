@@ -69,13 +69,15 @@ jobs:
               git -C gpu/third_party/fsr-vulkan apply "$PWD/$patch"
             fi
           done
-          cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PGO=off -DBB_LTO=OFF -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
+          cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=Release -DBB_PGO=off -DBB_LTO=OFF -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
           if ! ninja -C out/gpu bb-probe > out/gpu-probe-build.log 2>&1; then
             grep -v '^[[]' out/gpu-probe-build.log | tail -80 >&2
             exit 1
           fi
           test -s out/gpu/bb-probe.exe
           cp out/gpu/bb-probe.exe bb-probe.exe
+          llvm-strip --strip-debug bb-probe.exe
+          test -s bb-probe.exe
 
       - name: Publish rolling core
         shell: pwsh
@@ -107,7 +109,15 @@ jobs:
           git add $path
           if (-not (git diff --cached --quiet)) {
             git commit -m "runtime: refresh native core digest"
-            git push origin HEAD:firstlight-bootstrap
+            for attempt in 1 2 3; do
+              if git push origin HEAD:firstlight-bootstrap; then
+                break
+              fi
+              git fetch origin firstlight-bootstrap
+              git rebase origin/firstlight-bootstrap
+              if ($LASTEXITCODE -ne 0) { throw "Failed to rebase core digest update" }
+              if ($attempt -eq 3) { throw "Failed to publish core digest after retries" }
+            done
           }
 
       - uses: actions/upload-artifact@v4
