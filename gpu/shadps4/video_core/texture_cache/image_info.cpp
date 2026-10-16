@@ -6,6 +6,7 @@
 #include "core/libraries/videoout/buffer.h"
 #include "shader_recompiler/resource.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
+#include "video_core/amdgpu/bc_tiny.h"
 #include "video_core/texture_cache/host_compatibility.h"
 #include "video_core/texture_cache/image_info.h"
 #include "video_core/texture_cache/tile.h"
@@ -142,10 +143,81 @@ ImageInfo::ImageInfo(const AmdGpu::Image& image, const Shader::ImageResource& de
 
     alt_tile = Libraries::Kernel::sceKernelIsNeoMode() && image.alt_tile_mode;
     UpdateSize();
+
+    // AMD's proprietary Windows Vulkan driver rejects/crashes on First Light's BC 1D
+    // resources. Keep the guest layout/size as BC, but create an ordinary 1D host image
+    // and fill it from a CPU decode.
+    const auto guest_type = image.GetType();
+    const bool is_1d = guest_type == AmdGpu::ImageType::Color1D ||
+                       guest_type == AmdGpu::ImageType::Color1DArray;
+    const vk::Format decoded = BcTinyDecodedFormat(pixel_format);
+    if (AmdGpu::BcTinyDecode() && props.is_block && !props.is_depth && !props.is_volume &&
+        num_samples == 1 && decoded != vk::Format::eUndefined &&
+        !AmdGpu::IsMacroTiled(array_mode) && (is_1d || size.width < 4 || size.height < 4)) {
+        LOG_WARNING(Render_Vulkan,
+                    "First Light BC fallback: {}x{} {} type {} -> {} (CPU decode)",
+                    size.width, size.height, vk::to_string(pixel_format), u32(guest_type),
+                    vk::to_string(decoded));
+        props.is_bc_decoded = true;
+        bc_format = pixel_format;
+        pixel_format = decoded;
+    }
+}
+
+vk::Format BcTinyDecodedFormat(vk::Format format) noexcept {
+    switch (format) {
+    case vk::Format::eBc1RgbUnormBlock:
+    case vk::Format::eBc1RgbaUnormBlock:
+    case vk::Format::eBc2UnormBlock:
+    case vk::Format::eBc3UnormBlock:
+        return vk::Format::eR8G8B8A8Unorm;
+    case vk::Format::eBc1RgbSrgbBlock:
+    case vk::Format::eBc1RgbaSrgbBlock:
+    case vk::Format::eBc2SrgbBlock:
+    case vk::Format::eBc3SrgbBlock:
+        return vk::Format::eR8G8B8A8Srgb;
+    case vk::Format::eBc4UnormBlock:
+        return vk::Format::eR8Unorm;
+    case vk::Format::eBc4SnormBlock:
+        return vk::Format::eR8Snorm;
+    case vk::Format::eBc5UnormBlock:
+        return vk::Format::eR8G8Unorm;
+    case vk::Format::eBc5SnormBlock:
+        return vk::Format::eR8G8Snorm;
+    default:
+        return vk::Format::eUndefined;
+    }
+}
+
+std::optional<BcDecode::Kind> BcTinyDecodeKind(vk::Format format) noexcept {
+    switch (format) {
+    case vk::Format::eBc1RgbUnormBlock:
+    case vk::Format::eBc1RgbaUnormBlock:
+    case vk::Format::eBc1RgbSrgbBlock:
+    case vk::Format::eBc1RgbaSrgbBlock:
+        return BcDecode::Kind::Bc1;
+    case vk::Format::eBc2UnormBlock:
+    case vk::Format::eBc2SrgbBlock:
+        return BcDecode::Kind::Bc2;
+    case vk::Format::eBc3UnormBlock:
+    case vk::Format::eBc3SrgbBlock:
+        return BcDecode::Kind::Bc3;
+    case vk::Format::eBc4UnormBlock:
+        return BcDecode::Kind::Bc4Unorm;
+    case vk::Format::eBc4SnormBlock:
+        return BcDecode::Kind::Bc4Snorm;
+    case vk::Format::eBc5UnormBlock:
+        return BcDecode::Kind::Bc5Unorm;
+    case vk::Format::eBc5SnormBlock:
+        return BcDecode::Kind::Bc5Snorm;
+    default:
+        return std::nullopt;
+    }
 }
 
 bool ImageInfo::IsCompatible(const ImageInfo& info) const {
-    return (IsVulkanFormatCompatible(pixel_format, info.pixel_format) ||
+    return props.is_bc_decoded == info.props.is_bc_decoded &&
+           (IsVulkanFormatCompatible(pixel_format, info.pixel_format) ||
             IsVulkanFormatCompatible(info.pixel_format, pixel_format)) &&
            num_samples == info.num_samples && num_bits == info.num_bits;
 }
