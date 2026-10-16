@@ -10,6 +10,7 @@
 #include "common/types.h"
 #include "imgui/renderer/imgui_core.h"
 #include "sdl_window.h"
+#include "video_core/amdgpu/bc_tiny.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_dlss.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -19,6 +20,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 
 namespace Vulkan {
 
@@ -760,6 +762,20 @@ void Instance::CollectDeviceParameters() {
     std::printf("GPU: %s%s, %llu MiB VRAM, driver %s (%s), Vulkan %s\n", model_name.c_str(),
                 IsIntegrated() ? " (integrated)" : "", static_cast<unsigned long long>(vram >> 20),
                 driver_name.c_str(), driver.driverInfo.data(), api_version.c_str());
+    std::fflush(stdout);
+
+    // First Light: AMD's proprietary Windows driver has a bad path for the game's tiny
+    // BC1-BC5 1D resources. Decode those few resources on the CPU by default on AMD.
+    // FL_BC_TINY=0/1 overrides; BB_BC_TINY is accepted for compatibility with old scripts.
+    const char* bc_env = std::getenv("FL_BC_TINY");
+    if (!bc_env || !*bc_env) {
+        bc_env = std::getenv("BB_BC_TINY");
+    }
+    const bool bc_tiny = bc_env && *bc_env ? *bc_env == '1'
+                                           : driver_id == vk::DriverId::eAmdProprietary;
+    AmdGpu::bc_tiny_decode.store(bc_tiny, std::memory_order_relaxed);
+    std::printf("GPU: First Light tiny BC1-BC5 1D fallback %s (FL_BC_TINY=0/1)\n",
+                bc_tiny ? "CPU decode enabled" : "disabled");
     std::fflush(stdout);
     LOG_INFO(Render_Vulkan, "GPU_Vendor: {}", vendor_name);
     LOG_INFO(Render_Vulkan, "GPU_Model: {}", model_name);
