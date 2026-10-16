@@ -80,7 +80,7 @@ Copy-Item (Join-Path $Root "LICENSE") $OutputRoot -Force
 Copy-Item (Join-Path $Root "docs\FIRSTLIGHT_BOOTSTRAP.md") $OutputRoot -Force
 
 $Readme = @'
-inFAMOUS First Light native bootstrap - CUSA00575 v1.00
+inFAMOUS First Light native bootstrap - CUSA00575 v1.00 / v1.04
 
 1. Keep your legally obtained decrypted game dump outside this folder.
 2. Run:
