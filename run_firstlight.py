@@ -206,10 +206,11 @@ def main() -> int:
     # Trace Vulkan resource creation as well as uploads. This deliberately uses before/after
     # markers so a crash inside the proprietary AMD driver still identifies the exact API stage.
     env.setdefault("FL_GPU_RESOURCE_TRACE", "1")
-    # v1.04: keep guest 1D semantics unless the Vulkan capability query rejects the BCn
-    # representation. The targeted fallback then hosts only that resource as decoded 2D.
+    # v1.04 A/B against the known-good 1D path: do not promote guest 1D resources to host 2D
+    # and do not pre-decode BC1-BC5. Let the real VK_IMAGE_TYPE_1D capability/create path run.
     env.setdefault("FL_ALL_1D_AS_2D", "0")
-    env.setdefault("FL_BC_CAPABILITY_FALLBACK", "1")
+    env.setdefault("FL_BC_TINY", "0")
+    env.setdefault("FL_BC_CAPABILITY_FALLBACK", "0")
     # v1.04 introduces a sizeable import delta. Log the first call of each resolved host ABI by
     # default so the first failing subsystem can be reconstructed from one crash log.
     if values.get("APP_VER") == "01.04":
@@ -330,10 +331,11 @@ def main() -> int:
     log_path = user / "last_run.log"
     header = (
         f"inFAMOUS First Light native bootstrap\n"
-        f"compat_revision=amd-copy-isolation-v2-all1d2d\n"
+        f"compat_revision=firstlight-v104-true1d-parity\n"
         f"title_id=CUSA00575 version={values.get('VERSION')} app_ver={values.get('APP_VER')}\n"
         f"vk_record_thread={env.get('BB_VK_RECORD_THREAD')} upload_trace={env.get('FL_GPU_UPLOAD_TRACE')} "
-        f"all_1d_as_2d={env.get('FL_ALL_1D_AS_2D')} bc_capability_fallback={env.get('FL_BC_CAPABILITY_FALLBACK')} "
+        f"all_1d_as_2d={env.get('FL_ALL_1D_AS_2D')} bc_tiny={env.get('FL_BC_TINY')} "
+        f"bc_capability_fallback={env.get('FL_BC_CAPABILITY_FALLBACK')} "
         f"redzone={env.get('BB_RED_ZONE')}\n"
         f"game={game}\n"
         f"probe={probe}\n"
