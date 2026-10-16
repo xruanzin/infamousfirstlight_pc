@@ -139,9 +139,7 @@ void UniqueImage::Create(const vk::ImageCreateInfo& image_ci) {
     VkResult result = vmaCreateImage(allocator, &image_ci_unsafe, &alloc_ci, &unsafe_image,
                                      &allocation, &alloc_info);
     if (FlGpuResourceTrace()) {
-        std::printf("GPU: FL resource vmaCreateImage end result=%d image=%p allocation=%p\\n",
-                    int(result), reinterpret_cast<void*>(unsafe_image),
-                    reinterpret_cast<void*>(allocation));
+        std::printf("GPU: FL resource vmaCreateImage end result=%d\\n", int(result));
         std::fflush(stdout);
     }
     if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
@@ -268,9 +266,8 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
     }
     backing->image.Create(image_ci);
     if (FlGpuResourceTrace()) {
-        std::printf("GPU: FL resource #%llu image-create end handle=%p\\n",
-                    static_cast<unsigned long long>(image_uid),
-                    reinterpret_cast<void*>(static_cast<VkImage>(backing->image)));
+        std::printf("GPU: FL resource #%llu image-create end\\n",
+                    static_cast<unsigned long long>(image_uid));
         std::fflush(stdout);
     }
 
