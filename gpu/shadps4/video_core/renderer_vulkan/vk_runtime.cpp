@@ -243,11 +243,21 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
         FlushBarriers();
     }
 
-    scheduler.Record([src_handle = src->Handle(), image = dst->GetImage(),
-                      regions = scheduler.RecordData(upload_copies)](vk::CommandBuffer cmdbuf) {
-        cmdbuf.copyBufferToImage(src_handle, image, vk::ImageLayout::eTransferDstOptimal,
-                                 regions.size(), regions.data());
-    });
+    if (dst->info.props.is_bc_decoded) {
+        // First Light/AMD: keep the special BC1-BC5 fallback off the deferred recorder.
+        // CommandBuffer() drains earlier recorded barriers before issuing this copy immediately,
+        // which avoids the proprietary driver's fragile 1D/copy recording path.
+        auto cmdbuf = scheduler.CommandBuffer();
+        cmdbuf.copyBufferToImage(src->Handle(), dst->GetImage(),
+                                 vk::ImageLayout::eTransferDstOptimal,
+                                 static_cast<u32>(upload_copies.size()), upload_copies.data());
+    } else {
+        scheduler.Record([src_handle = src->Handle(), image = dst->GetImage(),
+                          regions = scheduler.RecordData(upload_copies)](vk::CommandBuffer cmdbuf) {
+            cmdbuf.copyBufferToImage(src_handle, image, vk::ImageLayout::eTransferDstOptimal,
+                                     regions.size(), regions.data());
+        });
+    }
 
     for (const auto& copy : upload_copies) {
         const auto copy_size = BufferImageCopySize(copy, dst->info.pixel_format);
