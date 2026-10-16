@@ -16,6 +16,7 @@ import collections
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import struct
 from prepare import parse_self, span, unpack
@@ -23,7 +24,11 @@ from link_libc import encode_id
 from cpu_compat import atomic_output, patch_image, patch_libc
 
 DEFAULT_MODULES = ('libc.prx', 'libSceFios2.prx')
-FS_LOAD = bytes.fromhex('64488b042500000000')  # mov rax, fs:[0]
+# mov r64, fs:[0] for any destination register. inFAMOUS-family executables
+# use rcx/rbx/r14/... as well as rax for the thread pointer.
+FS_LOAD_ANY = re.compile(
+    rb'\x64[\x48\x4c]\x8b[\x04\x0c\x14\x1c\x24\x2c\x34\x3c]\x25\x00\x00\x00\x00'
+)
 RED_ZONE_SITES = Path(__file__).resolve().parent.parent / 'patches' / 'redzone.json'
 LEA_DOWN = bytes.fromhex('488d642480')        # lea rsp, [rsp-0x80]
 LEA_UP = bytes.fromhex('488da42480000000')    # lea rsp, [rsp+0x80]
@@ -83,17 +88,15 @@ def module(path):
 
 
 def patch_fs_loads(image, ph, base):
-    """Rewrite initial-exec `mov rax, fs:[0]` to GS: glibc owns FS on Linux."""
+    """Rewrite initial-exec `mov reg, fs:[0]` to GS for every 64-bit register."""
     patched = 0
     for p in ph:
         if p['type'] != 1 or not p['flags'] & 1:
             continue
         start, end = base + p['vaddr'], base + p['vaddr'] + p['filesz']
-        at = image.find(FS_LOAD, start, end)
-        while at >= 0:
-            image[at] = 0x65
+        for match in FS_LOAD_ANY.finditer(image, start, end):
+            image[match.start()] = 0x65
             patched += 1
-            at = image.find(FS_LOAD, at + len(FS_LOAD), end)
     return patched
 
 
