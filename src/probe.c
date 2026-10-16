@@ -232,14 +232,22 @@ static LONG WINAPI unhandled_fault(EXCEPTION_POINTERS *info) { return fatal_exce
  * the displacement becomes the TEB TLS slot that holds the guest TCB (runtime_thread.c). */
 uint32_t runtime_thread_tcb_offset(void);
 static uint64_t patch_tcb_loads(const Segment *segments, uint64_t count) {
-    static const unsigned char load[]={0x65,0x48,0x8b,0x04,0x25,0,0,0,0};
+    /* link_modules.py changed fs to gs. Match mov r64, gs:[0] for every
+     * destination register, not only rax: inFAMOUS uses several registers. */
+    static const unsigned char zero[4]={0};
     uint32_t displacement=runtime_thread_tcb_offset();
     uint64_t patched=0;
     for (uint64_t s=0;s<count;++s) {
-        if (!(segments[s].flags&1) || segments[s].size<sizeof(load)) continue;
-        unsigned char *at=image+segments[s].address, *end=at+segments[s].size-sizeof(load);
-        for (; at<=end; ++at)
-            if (at[0]==0x65 && !memcmp(at,load,sizeof(load))) { memcpy(at+5,&displacement,4); ++patched; at+=sizeof(load)-1; }
+        if (!(segments[s].flags&1) || segments[s].size<9) continue;
+        unsigned char *at=image+segments[s].address, *end=at+segments[s].size-9;
+        for (; at<=end; ++at) {
+            if (at[0]==0x65 && (at[1]==0x48 || at[1]==0x4c) && at[2]==0x8b &&
+                (at[3]&0xc7)==0x04 && at[4]==0x25 && !memcmp(at+5,zero,4)) {
+                memcpy(at+5,&displacement,4);
+                ++patched;
+                at+=8;
+            }
+        }
     }
     return patched;
 }
