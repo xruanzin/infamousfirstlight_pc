@@ -80,7 +80,7 @@ void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {
         return;
     }
     const u32 download_size = image.info.pitch * image.info.size.height * image.info.size.depth *
-                              image.info.resources.layers * (image.info.num_bits / 8);
+                              image.info.HostLayers() * (image.info.num_bits / 8);
     ASSERT(download_size <= image.info.guest_size);
     const auto download =
         runtime.GetStagingPool().Request(download_size, MemoryType::HostCached, 16, !sync);
@@ -94,7 +94,7 @@ void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {
                                                         : vk::ImageAspectFlagBits::eColor,
                 .mipLevel = 0,
                 .baseArrayLayer = 0,
-                .layerCount = image.info.resources.layers,
+                .layerCount = image.info.HostLayers(),
             },
         .imageOffset = {0, 0, 0},
         .imageExtent = {image.info.size.width, image.info.size.height, image.info.size.depth},
@@ -801,7 +801,7 @@ void TextureCache::RefreshImage(Image& image) {
         image.hash = hash;
     }
 
-    const u32 num_layers = image.info.resources.layers;
+    const u32 num_layers = image.info.HostLayers();
     const u32 num_mips = image.info.resources.levels;
     const bool is_gpu_modified = True(image.flags & ImageFlagBits::GpuModified);
     const bool is_gpu_dirty = True(image.flags & ImageFlagBits::GpuDirty);
@@ -899,7 +899,7 @@ void TextureCache::UploadDecodedImage(Image& image) {
 
     const u32 block_bytes = BcDecode::BlockBytes(*kind);
     const u32 texel_bytes = BcDecode::TexelBytes(*kind);
-    const u32 num_layers = info.resources.layers;
+    const u32 num_layers = info.HostLayers();
     const u32 micro_mode = u32(AmdGpu::GetMicroTileMode(info.tile_mode));
     const u32 thickness = AmdGpu::GetMicroTileThickness(info.array_mode);
 
