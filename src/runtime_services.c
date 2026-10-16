@@ -555,7 +555,7 @@ static ABI int32_t audio_in_open(void) { return AUDIO_IN_NOT_OPENED; }
 
 static const RuntimeExport exports[]={
     {"sceDiscMapIsRequestOnHDD",disc_map_hdd},
-    {"Func_8A828CAEE7EDD5E9",disc_map_bitmap},
+    {"sceDiscMap_8A828CAEE7EDD5E9",disc_map_bitmap},
     {"sceUserServiceInitialize",user_initialize}, {"sceUserServiceTerminate",user_terminate},
     {"sceUserServiceGetInitialUser",user_initial}, {"sceUserServiceGetLoginUserIdList",user_list},
     {"sceUserServiceGetUserName",user_name}, {"sceUserServiceGetEvent",user_event},
