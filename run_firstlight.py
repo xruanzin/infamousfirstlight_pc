@@ -130,10 +130,21 @@ def main() -> int:
 
     # Keep the bootstrap deterministic and title-neutral.  These Bloodborne
     # features must never silently modify the CUSA00575 image.
+    # First boot must not inherit Bloodborne-specific launch state from a shell
+    # or an old bbport.ini.  Generic GPU/runtime toggles get FL_* opt-ins later.
+    for key in (
+        "BB_RENDER_RES", "BB_DLC_DIR", "BB_MODS_DIR", "BB_MODS_DISABLE",
+        "BB_THD_TOKEN", "BB_THD_ONLINE_ID", "BB_COMMUNITY_SERVER",
+        "BB_SHADNET_SERVER", "BB_SHADNET_WEBAPI", "BB_SHADNET_NPID",
+        "BB_SHADNET_PASSWORD", "BB_SHADNET_TOKEN",
+    ):
+        env.pop(key, None)
     env.update(
         BB_GAME_DIR=str(game),
         BB_USER_DIR=str(user),
         BB_GPU_USER_DIR=str(user),
+        BB_CONFIG=env.get("FL_CONFIG", str(user / "firstlight.ini")),
+        BB_UPSCALER=env.get("FL_UPSCALER", "off"),
         BB_ONLINE="0",
         BB_SOUND_HACK="0",
         BB_RED_ZONE="0",
