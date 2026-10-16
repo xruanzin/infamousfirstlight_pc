@@ -494,6 +494,11 @@ class FirstLightLauncher:
             next_action = data.get("next_action") or ""
             if kind == "unsupported_import":
                 text = "O jogo não abriu porque ainda falta implementar a função PS4: %s." % (detail or "desconhecida")
+            elif kind == "driver_fault":
+                text = "O jogo fechou dentro do driver Vulkan da GPU: %s." % (detail or "driver desconhecido")
+                last_upload = data.get("last_gpu_upload")
+                if last_upload:
+                    text += " Último upload rastreado: " + str(last_upload) + "."
             elif kind:
                 text = "O jogo parou em '%s'%s." % (kind, (" (" + str(detail) + ")") if detail else "")
             elif code == 0:
