@@ -20,6 +20,7 @@ UPDATE_MANIFEST_URL = (
     "firstlight-bootstrap/runtime/update_manifest.json"
 )
 HTTP_USER_AGENT = "FirstLightLauncher/3"
+# Rolling launcher channel enabled.
 MAX_LIVE_LOG_CHARS = 350_000
 MAX_EVENTS_PER_TICK = 80
 POLL_BUDGET_SECONDS = 0.015
