@@ -57,7 +57,7 @@ static ABI int32_t user_list(int32_t *ids) {
 }
 static ABI int32_t user_name(int32_t id,char *name,uint64_t size) {
     if (id!=USER_ID || !name) return USER_INVALID_ARGUMENT;
-    const char *value=getenv("BB_USER_NAME") ? getenv("BB_USER_NAME") : "Hunter";
+    const char *value=getenv("BB_USER_NAME") ? getenv("BB_USER_NAME") : "Player";
     if (strlen(value)+1>size) return (int32_t)0x8096000a; /* BUFFER_TOO_SHORT */
     strcpy(name,value); return 0;
 }
@@ -89,6 +89,23 @@ static ABI int32_t system_param(int32_t id,int32_t *value) {
     case 1000: *value=1; break;                 /* enter button = cross */
     default: fprintf(stderr,"STOP: unsupported system parameter %d\n",id); exit(21);
     }
+    return 0;
+}
+static ABI int32_t system_param_string(int32_t id,char *value,uint32_t size) {
+    if (id!=6 || !value || !size) return SYSTEM_PARAMETER; /* SystemName */
+    const char *name=getenv("FL_SYSTEM_NAME");
+    if (!name || !*name) name="PlayStation 4";
+    if (strlen(name)+1>size) return SYSTEM_PARAMETER;
+    memcpy(value,name,strlen(name)+1);
+    return 0;
+}
+typedef struct { float ratio; unsigned char reserved[128]; } DisplaySafeArea;
+static ABI int32_t system_safe_area(DisplaySafeArea *info) {
+    if (!info) return SYSTEM_PARAMETER;
+    memset(info,0,sizeof(*info)); info->ratio=1.0f; return 0;
+}
+static ABI int32_t system_show_safe_area(void) {
+    note("SystemService: display safe-area settings requested; using 100% safe area");
     return 0;
 }
 static ABI int32_t system_status(unsigned char *status) {
@@ -176,6 +193,8 @@ static ABI const char *net_ntop(int af,const void *src,char *dst,uint32_t size) 
     if (af!=2) { net_errno=47; return NULL; }
     return inet_ntop(AF_INET,src,dst,size);
 }
+static ABI int32_t netctl_init(void) { return 0; }
+static ABI int32_t netctl_term(void) { return 0; }
 static ABI int32_t netctl_state(int32_t *state) { if (!state) return NET_CTL_INVALID_ADDR; *state=0; return 0; }
 static ABI int32_t netctl_info(int code,void *info) { (void)code; (void)info; return NET_CTL_NOT_CONNECTED; }
 static ABI int32_t netctl_register(void *cb,void *arg,int32_t *cid) { (void)cb; (void)arg; if (!cid) return NET_CTL_INVALID_ADDR; *cid=new_id(); return 0; }
@@ -189,6 +208,13 @@ static ABI int32_t netctl_nat(uint32_t *info) {
 static ABI int32_t lib_init_id(void) { return new_id(); }
 static ABI int32_t ok_void(void) { return 0; }
 static ABI int32_t http_fail(void) { return HTTP_NETWORK; }
+static ABI int32_t http_headers(int32_t request,char **headers,uint64_t *size) {
+    (void)request;
+    if (headers) *headers=NULL;
+    if (size) *size=0;
+    return HTTP_NETWORK;
+}
+static ABI int32_t https_load_cert(void) { return HTTP_NETWORK; }
 /* Objects are created so setup code proceeds; any transfer fails as unplugged. */
 static ABI int32_t http_object(void) { return new_id(); }
 static ABI int32_t http_epoll(int32_t ctx,void **handle) {
@@ -222,6 +248,23 @@ static ABI int32_t np_compare(const void *a,const void *b) {
     if (!a || !b) return NP_INVALID_ARGUMENT;
     return memcmp(a,b,16) ? (int32_t)0x80550609 : 0; /* NP_UTIL NOT_MATCH */
 }
+static ABI int32_t np_title_context(int32_t label,const void *npid) {
+    if (label<0 || !npid) return NP_INVALID_ARGUMENT;
+    return new_id();
+}
+static ABI int32_t np_create_request_from_ctx(int32_t ctx) {
+    if (ctx<=0) return NP_INVALID_ARGUMENT;
+    return new_id();
+}
+static ABI int32_t np_async_signed_out(void) { return NP_SIGNED_OUT; }
+static ABI int32_t np_account_country(int32_t user,char *country) {
+    (void)user;
+    if (country) { country[0]='U'; country[1]='S'; country[2]=0; }
+    return NP_SIGNED_OUT;
+}
+static ABI int32_t np_web_error(int32_t request,int32_t *error) {
+    (void)request; if (error) *error=NP_SIGNED_OUT; return NP_SIGNED_OUT;
+}
 
 /* ---- Voice chat: ports exist, carry no audio ---- */
 static ABI int32_t voice_port(void *param,uint32_t *port) { (void)param; if (!port) return (int32_t)0x8029000b; *port=(uint32_t)new_id(); return 0; }
@@ -237,7 +280,8 @@ static ABI int32_t voice_info(uint32_t port,uint32_t *info) {
 /* ---- Common dialogs: nothing is displayed; an opened dialog finishes. ---- */
 typedef struct { const char *name; int initialized, status; } Dialog;
 static Dialog dialogs[]={{"CommonDialog",0,0},{"MsgDialog",0,0},{"SaveDataDialog",0,0},
-                         {"NpProfileDialog",0,0},{"NpCommerceDialog",0,0},{"ImeDialog",0,0}};
+                         {"NpProfileDialog",0,0},{"NpCommerceDialog",0,0},{"ImeDialog",0,0},
+                         {"ErrorDialog",0,0}};
 static int common_initialized;
 static ABI int32_t common_init(void) { common_initialized=1; return 0; }
 static int32_t dialog_init(int i) {
@@ -259,7 +303,13 @@ static int32_t dialog_term(int i) {
     static ABI int32_t tag##_open(const void *p) { (void)p; return dialog_open(i); } \
     static ABI int32_t tag##_status(void) { return dialog_status(i); } \
     static ABI int32_t tag##_term(void) { return dialog_term(i); }
-DIALOG(msg,1) DIALOG(save,2) DIALOG(profile,3) DIALOG(commerce,4)
+DIALOG(msg,1) DIALOG(save,2) DIALOG(profile,3) DIALOG(commerce,4) DIALOG(error,6)
+static ABI int32_t save_result(void *result) {
+    if (dialogs[2].status!=3) return (int32_t)0x80B80008; /* NOT_FINISHED */
+    if (!result) return (int32_t)0x80B80004;              /* ARG_NULL-ish */
+    memset(result,0,72); /* OrbisSaveDataDialogResult, x64 layout */
+    return 0;
+}
 static ABI int32_t profile_result(void *result) { if (result) memset(result,0,4); return 0; }
 /* ImeDialog: text typed on the keyboard into the game window (title bar shows it).
  * OrbisImeDialogParam: user, type, languages(8), enter label, method, filter,
@@ -367,6 +417,25 @@ static ABI int32_t trophy_game_info(int32_t ctx,int32_t handle,void *details,voi
 static ABI int32_t trophy_info(int32_t ctx,int32_t handle,int32_t id,void *details,void *data) {
     (void)id; return trophy_game_info(ctx,handle,details,data);
 }
+static ABI int32_t trophy_destroy_context(int32_t ctx) { return ctx>0 ? 0 : TROPHY_INVALID; }
+static ABI int32_t trophy_destroy_handle(int32_t handle) { return handle>0 ? 0 : TROPHY_INVALID; }
+static ABI int32_t trophy_unlock_state(int32_t ctx,int32_t handle,uint32_t *flags,uint32_t *count) {
+    if (ctx<=0 || handle<=0 || !flags || !count) return TROPHY_INVALID;
+    memset(flags,0,16); /* 128 trophy bits */
+    *count=0;
+    char path[600];
+    snprintf(path,sizeof(path),"%s/trophies.log",runtime_file_user_dir());
+    FILE *log=fopen(path,"r");
+    if (!log) return 0;
+    int id; long long when;
+    while (fscanf(log,"%d %lld",&id,&when)==2) {
+        (void)when;
+        if (id>=0 && id<128) flags[(unsigned)id/32]|=UINT32_C(1)<<((unsigned)id%32);
+        if (id>=0 && (uint32_t)(id+1)>*count) *count=(uint32_t)(id+1);
+    }
+    fclose(log);
+    return 0;
+}
 
 /* ---- PlayGo: fully installed package ---- */
 static int playgo_handle, playgo_chunks=-1;
@@ -406,7 +475,50 @@ static ABI int32_t playgo_locus(int32_t handle,const uint16_t *ids,uint32_t coun
     }
     return 0;
 }
-static ABI int32_t playgo_speed(int32_t handle,int32_t speed) { (void)speed; return handle==playgo_handle && handle ? 0 : PLAYGO_BAD_HANDLE; }
+typedef struct { uint64_t progress_size,total_size; } PlayGoProgress;
+typedef struct { uint16_t chunk; int8_t locus, reserved; } PlayGoTodo;
+static uint64_t playgo_language_mask;
+static ABI int32_t playgo_speed(int32_t handle,int32_t speed) {
+    (void)speed; return handle==playgo_handle && handle ? 0 : PLAYGO_BAD_HANDLE;
+}
+static ABI int32_t playgo_close(int32_t handle) {
+    if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
+    playgo_handle=0; return 0;
+}
+static ABI int32_t playgo_eta(int32_t handle,const uint16_t *ids,uint32_t count,int64_t *eta) {
+    if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
+    if (!ids || !eta) return PLAYGO_BAD_POINTER;
+    if (!count) return PLAYGO_BAD_SIZE;
+    for (uint32_t i=0;i<count;++i) if (ids[i]>=playgo_chunks) return PLAYGO_BAD_CHUNK;
+    *eta=0; return 0;
+}
+static ABI int32_t playgo_progress(int32_t handle,const uint16_t *ids,uint32_t count,PlayGoProgress *out) {
+    if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
+    if (!ids || !out) return PLAYGO_BAD_POINTER;
+    if (!count) return PLAYGO_BAD_SIZE;
+    for (uint32_t i=0;i<count;++i) if (ids[i]>=playgo_chunks) return PLAYGO_BAD_CHUNK;
+    out->total_size=count; out->progress_size=count; return 0;
+}
+static ABI int32_t playgo_todo(int32_t handle,PlayGoTodo *todo,uint32_t count,uint32_t *out) {
+    if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
+    if (!todo || !out) return PLAYGO_BAD_POINTER;
+    if (!count) return PLAYGO_BAD_SIZE;
+    *out=0; return 0; /* everything is already local */
+}
+static ABI int32_t playgo_language(int32_t handle,uint64_t mask) {
+    if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
+    playgo_language_mask=mask; return 0;
+}
+static ABI int32_t playgo_set_todo(int32_t handle,const PlayGoTodo *todo,uint32_t count) {
+    if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
+    if (!todo) return PLAYGO_BAD_POINTER;
+    if (!count) return PLAYGO_BAD_SIZE;
+    for (uint32_t i=0;i<count;++i) if (todo[i].chunk>=playgo_chunks) return PLAYGO_BAD_CHUNK;
+    return 0; /* requests are already fulfilled */
+}
+static ABI int32_t playgo_terminate(void) {
+    playgo_handle=0; playgo_chunks=-1; playgo_language_mask=0; return 0;
+}
 
 /* ---- DiscMap: the game is fully installed, no disc bitmap exists ---- */
 #define DISC_MAP_NO_BITMAP ((int32_t)0x81100004)
@@ -433,7 +545,10 @@ static const RuntimeExport exports[]={
     {"sceUserServiceInitialize",user_initialize}, {"sceUserServiceTerminate",user_terminate},
     {"sceUserServiceGetInitialUser",user_initial}, {"sceUserServiceGetLoginUserIdList",user_list},
     {"sceUserServiceGetUserName",user_name}, {"sceUserServiceGetEvent",user_event},
-    {"sceSystemServiceParamGetInt",system_param}, {"sceSystemServiceGetStatus",system_status},
+    {"sceSystemServiceParamGetInt",system_param}, {"sceSystemServiceParamGetString",system_param_string},
+    {"sceSystemServiceGetDisplaySafeAreaInfo",system_safe_area},
+    {"sceSystemServiceShowDisplaySafeAreaSettings",system_show_safe_area},
+    {"sceSystemServiceGetStatus",system_status},
     {"sceSystemServiceReceiveEvent",system_event}, {"sceSystemServiceHideSplashScreen",hide_splash},
     {"sceSystemServiceLaunchWebBrowser",launch_browser},
     {"sceNetInit",net_init}, {"sceNetTerm",net_term}, {"sceNetErrnoLoc",net_errno_loc},
@@ -450,6 +565,7 @@ static const RuntimeExport exports[]={
     {"sceNetSocketClose",net_unreachable}, {"sceNetSocketAbort",net_unreachable},
     {"sceNetEpollControl",net_unreachable}, {"sceNetEpollWait",net_unreachable}, {"sceNetEpollAbort",net_unreachable},
     {"sceNetResolverStartNtoa",net_unreachable}, {"sceNetResolverStartAton",net_unreachable},
+    {"sceNetCtlInit",netctl_init}, {"sceNetCtlTerm",netctl_term},
     {"sceNetCtlGetState",netctl_state}, {"sceNetCtlGetInfo",netctl_info},
     {"sceNetCtlRegisterCallback",netctl_register}, {"sceNetCtlCheckCallback",netctl_check},
     {"sceNetCtlUnregisterCallback",netctl_unregister}, {"sceNetCtlGetNatInfo",netctl_nat},
@@ -459,6 +575,8 @@ static const RuntimeExport exports[]={
     {"sceHttpCreateConnectionWithURL",http_object}, {"sceHttpCreateRequestWithURL",http_object},
     {"sceHttpSendRequest",http_fail}, {"sceHttpCreateEpoll",http_epoll},
     {"sceHttpSetNonblock",ok_void}, {"sceHttpSetConnectTimeOut",ok_void},
+    {"sceHttpSetRecvTimeOut",ok_void}, {"sceHttpSetSendTimeOut",ok_void},
+    {"sceHttpGetAllResponseHeaders",http_headers}, {"sceHttpsLoadCert",https_load_cert},
     {"sceHttpsEnableOption",ok_void}, {"sceHttpsDisableOption",ok_void},
     {"sceHttpAddRequestHeader",ok_void}, {"sceHttpSetRequestContentLength",ok_void},
     {"sceHttpDeleteConnection",ok_void}, {"sceHttpDeleteRequest",ok_void},
@@ -474,7 +592,7 @@ static const RuntimeExport exports[]={
     {"sceNpCreateAsyncRequest",np_request}, {"sceNpDeleteRequest",ok_void}, {"sceNpAbortRequest",ok_void},
     {"sceNpPollAsync",np_poll}, {"sceNpCheckNpAvailability",np_signed_out},
     {"sceNpGetParentalControlInfo",np_signed_out}, {"sceNpCheckPlus",np_signed_out},
-    {"sceNpGetGamePresenceStatus",np_signed_out},
+    {"sceNpGetGamePresenceStatus",np_signed_out}, {"sceNpGetAccountCountry",np_account_country},
     {"sceNpCmpNpId",np_compare}, {"sceNpCmpOnlineId",np_compare},
     {"sceNpAuthCreateAsyncRequest",np_request}, {"sceNpAuthDeleteRequest",ok_void},
     {"sceNpAuthPollAsync",np_poll}, {"sceNpAuthGetAuthorizationCode",np_signed_out},
@@ -483,6 +601,14 @@ static const RuntimeExport exports[]={
     {"sceNpLookupAbortRequest",ok_void}, {"sceNpLookupPollAsync",np_poll}, {"sceNpLookupNpId",np_signed_out},
     {"sceNpScoreCreateNpTitleCtx",np_request_ctx}, {"sceNpScoreDeleteNpTitleCtx",ok_void},
     {"sceNpScoreCreateRequest",np_request}, {"sceNpScoreDeleteRequest",ok_void}, {"sceNpScoreAbortRequest",ok_void},
+    {"sceNpScoreGetRankingByNpIdAsync",np_async_signed_out},
+    {"sceNpScoreGetRankingByRangeAsync",np_async_signed_out},
+    {"sceNpScoreRecordScoreAsync",np_async_signed_out}, {"sceNpScorePollAsync",np_poll},
+    {"sceNpTusCreateNpTitleCtx",np_title_context}, {"sceNpTusDeleteNpTitleCtx",ok_void},
+    {"sceNpTusCreateRequest",np_create_request_from_ctx}, {"sceNpTusDeleteRequest",ok_void},
+    {"sceNpTusGetMultiSlotVariableAsync",np_async_signed_out},
+    {"sceNpTusGetMultiUserVariableAsync",np_async_signed_out},
+    {"sceNpTusSetMultiSlotVariableAsync",np_async_signed_out}, {"sceNpTusPollAsync",np_poll},
     {"sceNpWebApiInitialize",lib_init_id}, {"sceNpWebApiTerminate",ok_void},
     {"sceNpWebApiCreateContext",np_signed_out},
     {"sceNpWebApiCreateRequest",np_signed_out}, {"sceNpWebApiSendRequest",np_signed_out},
@@ -492,7 +618,7 @@ static const RuntimeExport exports[]={
     {"sceNpWebApiGetHttpResponseHeaderValueLength",np_signed_out},
     {"sceNpWebApiCreatePushEventFilter",np_signed_out}, {"sceNpWebApiDeletePushEventFilter",ok_void},
     {"sceNpWebApiRegisterPushEventCallback",np_signed_out}, {"sceNpWebApiUnregisterPushEventCallback",ok_void},
-    {"sceNpWebApiUtilityParseNpId",np_signed_out},
+    {"sceNpWebApiUtilityParseNpId",np_signed_out}, {"sceNpWebApiGetErrorCode",np_web_error},
     {"sceNpMatching2ContextStart",np_signed_out}, {"sceNpMatching2ContextStop",ok_void},
     {"sceNpMatching2DestroyContext",ok_void},
     {"sceNpMatching2RegisterContextCallback",ok_void}, {"sceNpMatching2RegisterLobbyEventCallback",ok_void},
@@ -526,7 +652,10 @@ static const RuntimeExport exports[]={
     {"sceMsgDialogInitialize",msg_init}, {"sceMsgDialogOpen",msg_open},
     {"sceMsgDialogUpdateStatus",msg_status}, {"sceMsgDialogTerminate",msg_term},
     {"sceSaveDataDialogInitialize",save_init}, {"sceSaveDataDialogOpen",save_open},
-    {"sceSaveDataDialogUpdateStatus",save_status}, {"sceSaveDataDialogTerminate",save_term},
+    {"sceSaveDataDialogUpdateStatus",save_status}, {"sceSaveDataDialogGetResult",save_result},
+    {"sceSaveDataDialogTerminate",save_term},
+    {"sceErrorDialogInitialize",error_init}, {"sceErrorDialogOpen",error_open},
+    {"sceErrorDialogUpdateStatus",error_status}, {"sceErrorDialogTerminate",error_term},
     {"sceNpProfileDialogInitialize",profile_init}, {"sceNpProfileDialogOpen",profile_open},
     {"sceNpProfileDialogUpdateStatus",profile_status}, {"sceNpProfileDialogTerminate",profile_term},
     {"sceNpProfileDialogGetResult",profile_result},
@@ -536,9 +665,15 @@ static const RuntimeExport exports[]={
     {"sceImeDialogTerm",ime_term}, {"sceImeDialogAbort",ime_term},
     {"sceNpTrophyCreateContext",trophy_context}, {"sceNpTrophyCreateHandle",trophy_handle},
     {"sceNpTrophyRegisterContext",trophy_register}, {"sceNpTrophyUnlockTrophy",trophy_unlock},
+    {"sceNpTrophyDestroyContext",trophy_destroy_context}, {"sceNpTrophyDestroyHandle",trophy_destroy_handle},
+    {"sceNpTrophyGetTrophyUnlockState",trophy_unlock_state},
     {"sceNpTrophyGetGameInfo",trophy_game_info}, {"sceNpTrophyGetTrophyInfo",trophy_info},
-    {"scePlayGoInitialize",playgo_init}, {"scePlayGoOpen",playgo_open}, {"scePlayGoGetChunkId",playgo_chunk_ids},
-    {"scePlayGoGetLocus",playgo_locus}, {"scePlayGoSetInstallSpeed",playgo_speed},
+    {"scePlayGoInitialize",playgo_init}, {"scePlayGoOpen",playgo_open}, {"scePlayGoClose",playgo_close},
+    {"scePlayGoGetChunkId",playgo_chunk_ids}, {"scePlayGoGetLocus",playgo_locus},
+    {"scePlayGoGetEta",playgo_eta}, {"scePlayGoGetProgress",playgo_progress},
+    {"scePlayGoGetToDoList",playgo_todo}, {"scePlayGoSetLanguageMask",playgo_language},
+    {"scePlayGoSetToDoList",playgo_set_todo}, {"scePlayGoSetInstallSpeed",playgo_speed},
+    {"scePlayGoTerminate",playgo_terminate},
     {"sceMouseInit",ok_void}, {"sceMouseOpen",mouse_open}, {"sceMouseRead",mouse_read}, {"sceMouseClose",mouse_close},
     {"sceAudioInOpen",audio_in_open},
     {"sceDiscMapIsRequestOnHDD",discmap_on_hdd}, {"sceDiscMap_8A828CAEE7EDD5E9",discmap_8a82},
