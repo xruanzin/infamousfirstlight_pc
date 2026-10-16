@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "channel": "firstlight-bootstrap",
+  "description": "Incremental development updates for an existing First Light portable folder.",
+  "files": [
+    {
+      "path": "runtime/import_aliases.tsv",
+      "url": "https://raw.githubusercontent.com/xruanzin/infamousfirstlight_pc/firstlight-bootstrap/runtime/import_aliases.tsv",
+      "required": true,
+      "kind": "text"
+    },
+    {
+      "path": "runtime/firstlight_runtime.dll",
+      "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-hotfix/firstlight_runtime.dll",
+      "required": false,
+      "kind": "native"
+    }
+  ]
+}
