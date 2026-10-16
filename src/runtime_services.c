@@ -219,6 +219,24 @@ static ABI int32_t disc_map_bitmap(char *path,int64_t offset,int64_t bytes,
     (void)path; (void)offset; (void)bytes; (void)flags; (void)ret1; (void)ret2;
     return DISC_MAP_NO_BITMAP;
 }
+
+/* libSceDiscMap NID fJgP+wqifno / Func_7C980FFB0AA27E7A.
+ * shadPS4's implementation explicitly clears all three outputs and succeeds. */
+static ABI int32_t disc_map_request_7c98(char *path,int64_t offset,int64_t bytes,
+                                         int32_t *flags,int32_t *ret1,int32_t *ret2) {
+    (void)path; (void)offset; (void)bytes;
+    if (flags) *flags=0;
+    if (ret1) *ret1=0;
+    if (ret2) *ret2=0;
+    return ORBIS_OK;
+}
+static ABI int32_t disc_map_package_size(int64_t fflags,int32_t *ret1,int32_t *ret2) {
+    (void)fflags; (void)ret1; (void)ret2;
+    return DISC_MAP_NO_BITMAP;
+}
+static ABI int32_t disc_map_no_bitmap_void(void) {
+    return DISC_MAP_NO_BITMAP;
+}
 static ABI int32_t http_fail(void) { return HTTP_NETWORK; }
 static ABI int32_t http_headers(int32_t request,char **headers,uint64_t *size) {
     (void)request;
@@ -554,8 +572,11 @@ static ABI int32_t audio_in_open(void) { return AUDIO_IN_NOT_OPENED; }
 
 
 static const RuntimeExport exports[]={
+    {"sceDiscMapGetPackageSize",disc_map_package_size},
     {"sceDiscMapIsRequestOnHDD",disc_map_hdd},
+    {"sceDiscMap_7C980FFB0AA27E7A",disc_map_request_7c98},
     {"sceDiscMap_8A828CAEE7EDD5E9",disc_map_bitmap},
+    {"sceDiscMap_E7EBCE96E92F91F8",disc_map_no_bitmap_void},
     {"sceUserServiceInitialize",user_initialize}, {"sceUserServiceTerminate",user_terminate},
     {"sceUserServiceGetInitialUser",user_initial}, {"sceUserServiceGetLoginUserIdList",user_list},
     {"sceUserServiceGetUserName",user_name}, {"sceUserServiceGetEvent",user_event},
