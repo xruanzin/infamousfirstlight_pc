@@ -26,6 +26,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from prepare import inspect_libc, parse_self, sfo, span, unpack  # noqa: E402
 
+def encode_orbis_id(value: int) -> str:
+    codes = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-"
+    if value < 0x40:
+        return codes[value]
+    if value < 0x1000:
+        return codes[(value >> 6) & 0x3f] + codes[value & 0x3f]
+    return (codes[(value >> 12) & 0x3f] + codes[(value >> 6) & 0x3f] +
+            codes[value & 0x3f])
+
+
 KNOWN_REVISIONS = {
     "01.00": {
         "eboot": "155bd094caa24d2581de0c01d961e5847718d4caf120fa1ec8841e5522ae899b",
@@ -95,6 +105,16 @@ def dynamic_info(path: Path) -> dict:
             }
         )
 
+    import_modules = {}
+    import_libraries = {}
+    for tag, value in entries:
+        if tag == 0x6100000F:  # DT_SCE_NEEDED_MODULE
+            module_id = (value >> 48) & 0xFFFF
+            import_modules[encode_orbis_id(module_id)] = string(value & 0xFFFFFFFF)
+        elif tag == 0x61000015:  # DT_SCE_IMPORT_LIB
+            library_id = (value >> 48) & 0xFFFF
+            import_libraries[encode_orbis_id(library_id)] = string(value & 0xFFFFFFFF)
+
     imports = {}
     relocation_counts = collections.Counter()
     for offset_tag, size_tag in ((0x61000029, 0x6100002D), (0x6100002F, 0x61000031)):
@@ -108,6 +128,16 @@ def dynamic_info(path: Path) -> dict:
             if kind in (1, 6, 7) and sym < len(symbols) and not symbols[sym]["section"]:
                 imports[sym] = symbols[sym]["name"]
 
+    import_details = []
+    for scoped in imports.values():
+        parts = scoped.split("#")
+        import_details.append({
+            "symbol": scoped,
+            "nid": parts[0],
+            "library": import_libraries.get(parts[1]) if len(parts) > 1 else None,
+            "module": import_modules.get(parts[2]) if len(parts) > 2 else None,
+        })
+
     loads = [p for p in ph if p["type"] in (1, 0x61000010)]
     image_bytes = max(p["vaddr"] + p["memsz"] for p in loads)
     return {
@@ -119,6 +149,7 @@ def dynamic_info(path: Path) -> dict:
         "unavailable_metadata_headers": missing,
         "needed": [string(value) for tag, value in entries if tag == 1],
         "imports": list(imports.values()),
+        "import_details": import_details,
         "import_count": len(imports),
         "relocation_counts": dict(relocation_counts),
     }
@@ -200,6 +231,14 @@ def main() -> int:
     bases = [item.split("#", 1)[0] for item in eboot["imports"]]
     named = sorted({base: names[base] for base in bases if base in names}.items())
     unknown = sorted(set(base for base in bases if base not in names))
+    unknown_set = set(unknown)
+    unknown_by_module = collections.Counter()
+    unknown_by_library = collections.Counter()
+    for item in eboot.get("import_details", []):
+        if item["nid"] not in unknown_set:
+            continue
+        unknown_by_module[item.get("module") or "<unknown>"] += 1
+        unknown_by_library[item.get("library") or "<unknown>"] += 1
 
     module_presence = [
         {
@@ -251,6 +290,8 @@ def main() -> int:
             "unknown_count": len(unknown),
             "known": [{"nid": nid, "symbol": symbol} for nid, symbol in named],
             "unknown_nids": unknown,
+            "unknown_by_module": dict(sorted(unknown_by_module.items())),
+            "unknown_by_library": dict(sorted(unknown_by_library.items())),
         },
         "notes": [
             "No game payload is written to this report.",
@@ -276,6 +317,10 @@ def main() -> int:
         f"{eboot['import_count']} eboot imports; "
         f"{len(named)} named by current runtime table; {len(unknown)} still unknown"
     )
+    if unknown_by_module:
+        summary = ", ".join(f"{module}={count}" for module, count in
+                            sorted(unknown_by_module.items(), key=lambda item: (-item[1], item[0])))
+        print(f"Unknown imports by module: {summary}")
     tls=tls_loads(required["eboot"])
     print(f"Guest TLS loads: {tls['total']} total; {tls['non_rax']} use registers other than rax")
     print(f"libc _init_env is RET: {libc_evidence.get('init_env_is_ret', False)}")
