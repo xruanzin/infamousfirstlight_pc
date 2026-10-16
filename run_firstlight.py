@@ -173,6 +173,16 @@ def main() -> int:
         if not (game / "sce_module" / name).is_file():
             fail(f"requested linked module is missing: sce_module/{name}")
     run_tool("link_modules.py", game, "--out", out, "--modules", *module_args, env=env)
+    coverage_cmd = [
+        sys.executable,
+        str(PORT / "tools" / "firstlight_coverage.py"),
+        "--link",
+        str(out / "link.json"),
+        "--out",
+        str(out / "firstlight-coverage.json"),
+    ]
+    print("+", subprocess.list2cmdline(coverage_cmd))
+    subprocess.run(coverage_cmd, env=env, check=True)
     run_tool("content_profile.py", game, "--out", out, "--sku", env["BB_CONTENT_SKU"], env=env)
     bootstrap_summary(out, values)
 
