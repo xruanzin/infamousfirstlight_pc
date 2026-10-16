@@ -516,8 +516,11 @@ class FirstLightLauncher:
             elif kind == "driver_fault":
                 text = "O jogo fechou dentro do driver Vulkan da GPU: %s." % (detail or "driver desconhecido")
                 last_upload = data.get("last_gpu_upload")
+                last_submit = data.get("last_gpu_submit")
                 if last_upload:
                     text += " Último upload rastreado: " + str(last_upload) + "."
+                if last_submit:
+                    text += " Último estágio Vulkan: " + str(last_submit) + "."
             elif kind:
                 text = "O jogo parou em '%s'%s." % (kind, (" (" + str(detail) + ")") if detail else "")
             elif code == 0:
