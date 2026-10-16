@@ -324,7 +324,7 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
                       vk::to_string(format_info.flags), vk::to_string(format_info.usage),
                       vk::to_string(image_format_properties.result), info.guest_address,
                       info.size.width, info.size.height, info.size.depth, info.resources.layers,
-                      info.resources.levels, info.props.is_bc_decoded);
+                      info.resources.levels, info.props.is_bc_decoded ? 1u : 0u);
             ASSERT_MSG(false, "Unsupported Vulkan image combination was blocked before driver call");
         }
         // Parity with the known-good First Light build: keep the resource genuinely 1D and let
