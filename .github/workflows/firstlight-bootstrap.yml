@@ -7,6 +7,9 @@ concurrency:
 on:
   push:
     branches: [firstlight-bootstrap]
+    paths-ignore:
+      - "runtime/**"
+      - "src/hotfix/**"
   pull_request:
     branches: [windows]
 
@@ -96,6 +99,8 @@ jobs:
           test -s out/firstlight-portable/FirstLightBootstrap.exe
           test -s out/firstlight-portable/FirstLightLauncher.exe
           test -s out/firstlight-portable/bin/bb-probe.exe
+          test -s out/firstlight-portable/runtime/firstlight_runtime.dll
+          test -s out/firstlight-portable/runtime/import_aliases.tsv
       - uses: actions/upload-artifact@v4
         with:
           name: firstlight-bootstrap-portable
