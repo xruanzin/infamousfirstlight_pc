@@ -44,11 +44,19 @@ def main()->int:
  # Preserve a compact crash tail in the machine-readable diagnosis so the next iteration does
  # not depend on a second file just to identify the call immediately preceding the fault.
  crash_tail=lines[-32:]
+ if stop["kind"]=="unknown":
+  code=a.exit_code & 0xffffffff
+  if code==0xC0000374:
+   stop={"kind":"windows_heap_corruption","detail":"0xC0000374"}
+  elif code==0xC0000005:
+   stop={"kind":"windows_access_violation","detail":"0xC0000005"}
  if a.exit_code==0 and stop["kind"]=="unknown": stop={"kind":"clean_exit","detail":None}
  next_action={
   "unsupported_import":"implement or bind the reported ABI contract; do not success-stub it blindly",
   "guest_fault":"inspect the reported guest offset and its inputs/last runtime calls",
   "driver_fault":"isolate the GPU command/resource path before changing guest semantics",
+  "windows_heap_corruption":"inspect the earliest memory overwrite or mismatched allocation/free before the Windows heap abort",
+  "windows_access_violation":"inspect the faulting native/guest address and the immediately preceding runtime/GPU operation",
   "gpu_capability_block":"inspect the rejected Vulkan image combination; the runtime stopped before passing it to the driver",
   "gpu_assertion":"inspect the GPU errors immediately before the assertion; do not change guest CPU semantics",
   "watchdog":"inspect the emitted thread stacks for deadlock or an unserviced event",
