@@ -16,6 +16,12 @@
       "kind": "text"
     },
     {
+      "path": "tools/firstlight_log.py",
+      "url": "https://raw.githubusercontent.com/xruanzin/infamousfirstlight_pc/firstlight-bootstrap/tools/firstlight_log.py",
+      "required": true,
+      "kind": "text"
+    },
+    {
       "path": "runtime/firstlight_runtime.dll",
       "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-hotfix/firstlight_runtime.dll",
       "required": false,
