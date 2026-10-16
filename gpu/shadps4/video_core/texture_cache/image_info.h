@@ -64,6 +64,12 @@ struct ImageInfo {
     bool IsCompatible(const ImageInfo& info) const;
     void UpdateSize();
 
+    // Guest layout can be pow2-padded while the host VkImage uses only addressable layers.
+    // Zero means identical to resources.layers.
+    [[nodiscard]] u32 HostLayers() const {
+        return host_layers ? host_layers : resources.layers;
+    }
+
     struct {
         VAddr cmask_addr;
         VAddr fmask_addr;
@@ -91,6 +97,7 @@ struct ImageInfo {
     std::array<MipInfo, 16> mips_layout;
     VAddr guest_address{};
     u32 guest_size{};
+    u32 host_layers{};
     u8 bank_swizzle{};
     bool alt_tile{};
 
