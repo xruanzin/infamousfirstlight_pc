@@ -30,6 +30,7 @@ typedef void *(ABI *ThreadSelf)(void);
 typedef int32_t (ABI *ThreadGetAttr)(void *,void **);
 typedef int32_t (ABI *ThreadAffinity)(void **,uint64_t *);
 typedef int32_t (ABI *IntQuery)(void);
+typedef int32_t (ABI *DiscMapRequest)(char *,int64_t,int64_t,int32_t *,int32_t *,int32_t *);
 static void *main_identity;
 static void *tls_worker(void *unused) {
     (void)unused;
@@ -358,6 +359,11 @@ int main(int argc,char **argv) {
     assert(GET(IntQuery,"WslcK1FQcGI#g#T")()==0);
     assert(GET(IntQuery,"rNRtm1uioyY#g#T")()==0);
     assert(!strcmp(runtime_import_name("WslcK1FQcGI#g#T"),"sceKernelIsNeoMode"));
+    int32_t dm_flags=7,dm_a=8,dm_b=9;
+    DiscMapRequest dm=GET(DiscMapRequest,"fJgP+wqifno#libSceDiscMap");
+    assert(dm && dm(NULL,0,0,&dm_flags,&dm_a,&dm_b)==0);
+    assert(dm_flags==0 && dm_a==0 && dm_b==0);
+    assert(!strcmp(runtime_import_name("fJgP+wqifno#libSceDiscMap"),"sceDiscMap_7C980FFB0AA27E7A"));
     assert(runtime_resolve("bzQExy189ZI#wrong#module",0)==0);
     assert(runtime_resolve("unknown",0)==0);
     assert(runtime_resolve("8zTFvBIAIN8#q#q",1)==0);
