@@ -99,6 +99,85 @@ static vk::FormatFeatureFlags2 FormatFeatureFlags(const vk::ImageUsageFlags usag
     return feature_flags;
 }
 
+static vk::Result QueryImageSupport(const Vulkan::Instance& instance, const ImageInfo& info,
+                                    vk::ImageType image_type, vk::Format format,
+                                    vk::ImageUsageFlags usage, vk::ImageCreateFlags flags) {
+    const vk::PhysicalDeviceImageFormatInfo2 query{
+        .format = format,
+        .type = image_type,
+        .tiling = vk::ImageTiling::eOptimal,
+        .usage = usage,
+        .flags = flags,
+    };
+    auto result = instance.GetPhysicalDevice().getImageFormatProperties2(query);
+    if (result.result == vk::Result::eErrorFormatNotSupported &&
+        (usage & vk::ImageUsageFlagBits::eStorage)) {
+        auto relaxed = query;
+        relaxed.usage &= ~vk::ImageUsageFlagBits::eStorage;
+        result = instance.GetPhysicalDevice().getImageFormatProperties2(relaxed);
+    }
+    return result.result;
+}
+
+bool ApplyBc1DCapabilityFallback(const Vulkan::Instance& instance, ImageInfo& info) {
+    static const bool enabled = [] {
+        const char* value = std::getenv("FL_BC_CAPABILITY_FALLBACK");
+        return !value || value[0] != '0';
+    }();
+    if (!enabled || info.props.is_bc_decoded || !info.props.is_block || info.props.is_depth ||
+        info.props.is_volume || info.num_samples != 1 || info.type != AmdGpu::ImageType::Color1D) {
+        return false;
+    }
+
+    const vk::Format decoded = BcTinyDecodedFormat(info.pixel_format);
+    if (decoded == vk::Format::eUndefined) {
+        return false;
+    }
+
+    vk::ImageCreateFlags guest_flags{vk::ImageCreateFlagBits::eMutableFormat |
+                                     vk::ImageCreateFlagBits::eExtendedUsage};
+    if (instance.IsBlockTexelViewSupported()) {
+        guest_flags |= vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
+    }
+    const auto guest_usage = ImageUsageFlags(instance, info);
+    const auto guest_format =
+        instance.GetSupportedFormat(info.pixel_format, FormatFeatureFlags(guest_usage));
+    const auto native_result =
+        QueryImageSupport(instance, info, vk::ImageType::e1D, guest_format, guest_usage, guest_flags);
+
+    if (native_result == vk::Result::eSuccess) {
+        return false;
+    }
+
+    ImageInfo candidate = info;
+    candidate.props.is_bc_decoded = true;
+    candidate.props.is_host_2d = true;
+    candidate.bc_format = info.pixel_format;
+    candidate.pixel_format = decoded;
+
+    const auto host_usage = ImageUsageFlags(instance, candidate);
+    const auto host_format =
+        instance.GetSupportedFormat(candidate.pixel_format, FormatFeatureFlags(host_usage));
+    const vk::ImageCreateFlags host_flags{vk::ImageCreateFlagBits::eMutableFormat |
+                                          vk::ImageCreateFlagBits::eExtendedUsage};
+    const auto fallback_result =
+        QueryImageSupport(instance, candidate, vk::ImageType::e2D, host_format, host_usage, host_flags);
+
+    LOG_WARNING(Render_Vulkan,
+                "BCN CAPABILITY: guest={:#x} {} 1D {}x{} layers={} native={} -> host={} 2D "
+                "decoded={} fallback={}",
+                info.guest_address, vk::to_string(info.pixel_format), info.size.width,
+                info.size.height, info.resources.layers, vk::to_string(native_result),
+                vk::to_string(host_format), vk::to_string(decoded), vk::to_string(fallback_result));
+
+    if (fallback_result != vk::Result::eSuccess) {
+        return false;
+    }
+
+    info = candidate;
+    return true;
+}
+
 UniqueImage::~UniqueImage() {
     if (image) {
         vmaDestroyImage(allocator, image, allocation);
@@ -230,14 +309,18 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
             format_info.usage = usage_flags;
         }
     }
-    if (image_format_properties.result == vk::Result::eErrorFormatNotSupported) {
-        LOG_ERROR(Render_Vulkan, "image format {} type {} is not supported (flags {}, usage {})",
+    if (image_format_properties.result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan,
+                  "Refusing unsupported image before vkCreateImage: format={} type={} flags={} "
+                  "usage={} result={} guest={:#x} size={}x{}x{} layers={} mips={} decoded={}",
                   vk::to_string(supported_format), vk::to_string(format_info.type),
-                  vk::to_string(format_info.flags), vk::to_string(format_info.usage));
+                  vk::to_string(format_info.flags), vk::to_string(format_info.usage),
+                  vk::to_string(image_format_properties.result), info.guest_address,
+                  info.size.width, info.size.height, info.size.depth, info.resources.layers,
+                  info.resources.levels, info.props.is_bc_decoded);
+        ASSERT_MSG(false, "Unsupported Vulkan image combination was blocked before driver call");
     }
-    supported_samples = image_format_properties.result == vk::Result::eSuccess
-                            ? image_format_properties.value.imageFormatProperties.sampleCounts
-                            : vk::SampleCountFlagBits::e1;
+    supported_samples = image_format_properties.value.imageFormatProperties.sampleCounts;
 
     const vk::ImageCreateInfo image_ci = {
         .flags = flags,
