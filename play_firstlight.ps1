@@ -3,6 +3,8 @@ param(
     [string]$GameDir = "",
     [switch]$Console,
     [switch]$PrepareOnly,
+    [switch]$CpuOnly,
+    [int]$ImportTrace = -1,
     [int]$Timeout = 0
 )
 
@@ -22,6 +24,11 @@ $argsList = @("run_firstlight.py")
 if ($GameDir) { $argsList += $GameDir }
 if ($Console) { $argsList += "--console" }
 if ($PrepareOnly) { $argsList += "--prepare-only" }
+if ($CpuOnly) { $argsList += "--cpu-only" }
+if ($ImportTrace -ge 0) {
+    $argsList += "--import-trace"
+    $argsList += "$ImportTrace"
+}
 if ($Timeout -gt 0) {
     $argsList += "--timeout"
     $argsList += "$Timeout"
