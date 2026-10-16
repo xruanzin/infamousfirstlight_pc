@@ -20,7 +20,7 @@
       "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-hotfix/firstlight_runtime.dll",
       "required": false,
       "kind": "native",
-      "sha256": "b1f265e4ee6206e7e235d81e233b7509ad57fd9113e9bc1d0320a33ef7bac2a3"
+      "sha256": "0d334972db987f5c799a98bd5c10ff6de9af9d5144c3abad206d978aaadacff8"
     }
   ]
 }
