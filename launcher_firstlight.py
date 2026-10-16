@@ -521,6 +521,13 @@ class FirstLightLauncher:
                     text += " Último upload rastreado: " + str(last_upload) + "."
                 if last_submit:
                     text += " Último estágio Vulkan: " + str(last_submit) + "."
+            elif kind == "windows_heap_corruption":
+                text = "O Windows encerrou o processo por corrupção de heap (0xC0000374)."
+                last_upload = data.get("last_gpu_upload")
+                if last_upload:
+                    text += " Última operação GPU rastreada: " + str(last_upload) + "."
+            elif kind == "windows_access_violation":
+                text = "O Windows encerrou o processo por violação de acesso (0xC0000005)."
             elif kind:
                 text = "O jogo parou em '%s'%s." % (kind, (" (" + str(detail) + ")") if detail else "")
             elif code == 0:
