@@ -155,6 +155,10 @@ static ABI int64_t posix_time(int64_t *out) { int64_t t=(int64_t)time(NULL); if 
 /* ---- process ---- */
 static ABI int32_t get_pagesize(void) { return PAGE; }
 static ABI int32_t get_pid(void) { return 1000; }
+/* Hardware-mode queries used by First Light during early process initialization.
+ * This runtime currently targets the base PS4 profile, so Neo/PS4 Pro mode is disabled. */
+static ABI int32_t kernel_is_neo_mode(void) { return 0; }
+static ABI int32_t kernel_has_neo_mode(void) { return 0; }
 static ABI int32_t yield(void) { sched_yield(); return 0; }
 static ABI __attribute__((noreturn)) void hard_exit(int status) {
     printf("Runtime: guest requested _exit(%d)\n",status);
@@ -306,6 +310,7 @@ static const RuntimeExport exports[]={
     {"sceKernelGettimeofday",kernel_gettimeofday},
     {"time",posix_time},
     {"getpagesize",get_pagesize}, {"getpid",get_pid}, {"sched_yield",yield},
+    {"sceKernelIsNeoMode",kernel_is_neo_mode}, {"sceKernelHasNeoMode",kernel_has_neo_mode},
     {"_exit",hard_exit},
     {"sceKernelDebugRaiseException",raise_exception},
     {"sceKernelDebugRaiseExceptionOnReleaseMode",raise_exception},
