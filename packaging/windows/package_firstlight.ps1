@@ -88,6 +88,29 @@ $PyArgs += (Join-Path $Root "run_firstlight.py")
 & $Python @PyArgs
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 
+# Build a standalone windowed launcher so end users never need PowerShell.
+$LauncherDist = Join-Path $Root "out\firstlight-launcher-dist"
+$LauncherWork = Join-Path $Root "out\firstlight-launcher-work"
+Remove-Item $LauncherDist,$LauncherWork -Recurse -Force -ErrorAction SilentlyContinue
+$LauncherArgs = @(
+    "-m","PyInstaller",
+    "--noconfirm","--clean","--log-level","WARN",
+    "--onefile","--windowed",
+    "--name","FirstLightLauncher",
+    "--distpath",$LauncherDist,
+    "--workpath",$LauncherWork,
+    "--specpath",$LauncherWork
+)
+if ($IconIco) {
+    $LauncherArgs += "--icon"
+    $LauncherArgs += $IconIco
+}
+$LauncherArgs += (Join-Path $Root "launcher_firstlight.py")
+& $Python @LauncherArgs
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $LauncherDist "FirstLightLauncher.exe"))) {
+    throw "FirstLightLauncher build failed."
+}
+
 Remove-Item $OutputRoot -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $OutputRoot | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "bin") | Out-Null
@@ -97,6 +120,7 @@ New-Item -ItemType Directory -Force (Join-Path $OutputRoot "patches") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutputRoot "src") | Out-Null
 
 Copy-Item (Join-Path $PyDist "FirstLightBootstrap\*") $OutputRoot -Recurse -Force
+Copy-Item (Join-Path $LauncherDist "FirstLightLauncher.exe") (Join-Path $OutputRoot "FirstLightLauncher.exe") -Force
 
 Copy-Item (Join-Path $Root "out\bb-probe.exe") (Join-Path $OutputRoot "bin\") -Force
 Copy-Item (Join-Path $Root "out\bb-gpu-capabilities.exe") (Join-Path $OutputRoot "bin\") -Force
@@ -126,10 +150,13 @@ $Readme = @'
 inFAMOUS First Light native bootstrap - CUSA00575 v1.00 / v1.04
 
 1. Keep your legally obtained decrypted game dump outside this folder.
-2. Run:
-   FirstLightBootstrap.exe "D:\Games\CUSA00575"
-3. The bootstrap prepares the native image and starts the original x86-64 eboot.
-4. Send user\last_run.log when the game stops or crashes.
+2. Double-click FirstLightLauncher.exe.
+3. Choose the extracted CUSA00575 game folder. The launcher remembers it.
+4. Click "Iniciar jogo". The launcher shows the live log and explains why boot stopped.
+5. Use "Copiar relatório" or "Salvar relatório..." and send that report when the game stops.
+
+Advanced/manual mode:
+  FirstLightBootstrap.exe "D:\Games\CUSA00575"
 
 Required in the dump:
   eboot.bin
