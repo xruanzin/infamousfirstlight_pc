@@ -195,6 +195,9 @@ public:
     /// Reuploads image contents.
     void RefreshImage(Image& image);
 
+    /// First Light/AMD: decode BC1-BC5 guest blocks into plain texels before Vulkan upload.
+    void UploadDecodedImage(Image& image);
+
     /// Retrieves the sampler that matches the provided S# descriptor.
     /// extra_lod_bias: bbport, added to the S#'s bias (reduced scene rendering).
     [[nodiscard]] vk::Sampler GetSampler(const AmdGpu::Sampler& sampler,
