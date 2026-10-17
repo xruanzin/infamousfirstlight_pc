@@ -73,6 +73,45 @@ jobs:
           echo "DZN bundle files:"
           ls -lh out/dzn
 
+      - name: Add official DXIL validator
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "v1.9.2609"
+          $zipUrl = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$version/dxc_2026_09_29.zip"
+          $zip = "out/dxc.zip"
+          $extract = "out/dxc"
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $extract
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+
+          $dxil = Get-ChildItem $extract -Recurse -File -Filter "dxil.dll" |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if (-not $dxil) { throw "x64 dxil.dll was not found in the pinned DXC release" }
+          Copy-Item $dxil.FullName "out/dzn/DXIL.dll" -Force
+
+          $dxcompiler = Get-ChildItem $extract -Recurse -File -Filter "dxcompiler.dll" |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if ($dxcompiler) {
+            Copy-Item $dxcompiler.FullName "out/dzn/dxcompiler.dll" -Force
+          }
+
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/microsoft/DirectXShaderCompiler/$version/LICENSE.TXT" -OutFile "out/dzn/DXC-LICENSE.TXT"
+          $thirdParty = "https://raw.githubusercontent.com/microsoft/DirectXShaderCompiler/$version/ThirdPartyNotices.txt"
+          try {
+            Invoke-WebRequest -Uri $thirdParty -OutFile "out/dzn/DXC-ThirdPartyNotices.txt"
+          } catch {
+            Write-Warning "DXC ThirdPartyNotices.txt was not available at the pinned tag."
+          }
+
+          if (-not (Test-Path "out/dzn/DXIL.dll" -PathType Leaf)) { throw "DXIL.dll staging failed" }
+          Get-Item "out/dzn/DXIL.dll" | Format-List Name,Length,VersionInfo
+          if (Test-Path "out/dzn/dxcompiler.dll") {
+            Get-Item "out/dzn/dxcompiler.dll" | Format-List Name,Length,VersionInfo
+          }
+
       - name: Make portable ICD manifest and zip
         shell: pwsh
         run: |
