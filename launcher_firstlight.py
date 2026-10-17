@@ -656,7 +656,13 @@ class FirstLightLauncher:
             if kind == "unsupported_import":
                 text = "O jogo não abriu porque ainda falta implementar a função PS4: %s." % (detail or "desconhecida")
             elif kind == "driver_fault":
-                text = "O jogo fechou dentro do driver Vulkan da GPU: %s." % (detail or "driver desconhecido")
+                if self.backend.get() == BACKEND_D3D12 and str(detail).lower() == "amdvlk64.dll":
+                    text = (
+                        "O modo DirectX 12/DZN foi selecionado, mas o processo ainda carregou "
+                        "amdvlk64.dll. O override do ICD DZN não foi aplicado pelo Vulkan Loader."
+                    )
+                else:
+                    text = "O jogo fechou dentro do driver da GPU: %s." % (detail or "driver desconhecido")
                 last_upload = data.get("last_gpu_upload")
                 last_submit = data.get("last_gpu_submit")
                 if last_upload:
