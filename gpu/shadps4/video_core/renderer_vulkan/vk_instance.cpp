@@ -270,6 +270,10 @@ bool Instance::CreateDevice() {
     const vk::StructureChain feature_chain = physical_device.getFeatures2<
         vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
         vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceDynamicRenderingFeaturesKHR,
+        vk::PhysicalDeviceSynchronization2FeaturesKHR,
+        vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR,
+        vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT,
         vk::PhysicalDeviceRobustness2FeaturesEXT,
         vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
         vk::PhysicalDevicePrimitiveTopologyListRestartFeaturesEXT,
@@ -283,10 +287,13 @@ bool Instance::CreateDevice() {
     const vk::StructureChain properties_chain = physical_device.getProperties2<
         vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties,
         vk::PhysicalDeviceVulkan12Properties, vk::PhysicalDeviceVulkan13Properties,
+        vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT,
         vk::PhysicalDevicePushDescriptorPropertiesKHR>();
     vk11_props = properties_chain.get<vk::PhysicalDeviceVulkan11Properties>();
     vk12_props = properties_chain.get<vk::PhysicalDeviceVulkan12Properties>();
     vk13_props = properties_chain.get<vk::PhysicalDeviceVulkan13Properties>();
+    const auto subgroup_props_ext =
+        properties_chain.get<vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT>();
     push_descriptor_props = properties_chain.get<vk::PhysicalDevicePushDescriptorPropertiesKHR>();
     LOG_INFO(Render_Vulkan, "Physical device subgroup size {}", vk11_props.subgroupSize);
 
@@ -498,6 +505,41 @@ bool Instance::CreateDevice() {
     const auto vk11_features = feature_chain.get<vk::PhysicalDeviceVulkan11Features>();
     vk12_features = feature_chain.get<vk::PhysicalDeviceVulkan12Features>();
     vk13_features = feature_chain.get<vk::PhysicalDeviceVulkan13Features>();
+    const auto dynamic_rendering_features =
+        feature_chain.get<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>();
+    const auto synchronization2_features =
+        feature_chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>();
+    const auto integer_dot_features =
+        feature_chain.get<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>();
+    const auto subgroup_size_features =
+        feature_chain.get<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>();
+    if (dozen_vulkan12) {
+        ASSERT_MSG(dynamic_rendering_features.dynamicRendering,
+                   "DZN Vulkan 1.2 compatibility requires dynamicRendering feature");
+        ASSERT_MSG(synchronization2_features.synchronization2,
+                   "DZN Vulkan 1.2 compatibility requires synchronization2 feature");
+        ASSERT_MSG(integer_dot_features.shaderIntegerDotProduct,
+                   "DZN Vulkan 1.2 compatibility requires shaderIntegerDotProduct feature");
+        ASSERT_MSG(subgroup_size_features.subgroupSizeControl,
+                   "DZN Vulkan 1.2 compatibility requires subgroupSizeControl feature");
+
+        vk13_features.dynamicRendering = dynamic_rendering_features.dynamicRendering;
+        vk13_features.synchronization2 = synchronization2_features.synchronization2;
+        vk13_features.shaderIntegerDotProduct = integer_dot_features.shaderIntegerDotProduct;
+        vk13_features.subgroupSizeControl = subgroup_size_features.subgroupSizeControl;
+        vk13_props.minSubgroupSize = subgroup_props_ext.minSubgroupSize;
+        vk13_props.maxSubgroupSize = subgroup_props_ext.maxSubgroupSize;
+        vk13_props.maxComputeWorkgroupSubgroups = subgroup_props_ext.maxComputeWorkgroupSubgroups;
+        vk13_props.requiredSubgroupSizeStages = subgroup_props_ext.requiredSubgroupSizeStages;
+        std::printf(
+            "GPU: DZN Vulkan 1.2 promoted features: dynamicRendering=%u sync2=%u integerDot=%u subgroupSizeControl=%u maxSubgroup=%u\n",
+            unsigned(dynamic_rendering_features.dynamicRendering),
+            unsigned(synchronization2_features.synchronization2),
+            unsigned(integer_dot_features.shaderIntegerDotProduct),
+            unsigned(subgroup_size_features.subgroupSizeControl),
+            subgroup_props_ext.maxSubgroupSize);
+        std::fflush(stdout);
+    }
     // bbport: DLSS (optional bridge DLL) needs its own device extensions on NVIDIA GPUs.
     const size_t renderer_extension_count = enabled_extensions.size();
     std::vector<const char*> dlss_extensions;
@@ -580,6 +622,19 @@ bool Instance::CreateDevice() {
             .dynamicRendering = vk13_features.dynamicRendering,
             .shaderIntegerDotProduct = vk13_features.shaderIntegerDotProduct,
             .maintenance4 = vk13_features.maintenance4,
+        },
+        vk::PhysicalDeviceDynamicRenderingFeaturesKHR{
+            .dynamicRendering = dynamic_rendering_features.dynamicRendering,
+        },
+        vk::PhysicalDeviceSynchronization2FeaturesKHR{
+            .synchronization2 = synchronization2_features.synchronization2,
+        },
+        vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR{
+            .shaderIntegerDotProduct = integer_dot_features.shaderIntegerDotProduct,
+        },
+        vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT{
+            .subgroupSizeControl = subgroup_size_features.subgroupSizeControl,
+            .computeFullSubgroups = subgroup_size_features.computeFullSubgroups,
         },
         // Extensions
         vk::PhysicalDeviceCustomBorderColorFeaturesEXT{
@@ -666,6 +721,14 @@ bool Instance::CreateDevice() {
         },
     };
 
+    if (dozen_vulkan12) {
+        device_chain.unlink<vk::PhysicalDeviceVulkan13Features>();
+    } else {
+        device_chain.unlink<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>();
+        device_chain.unlink<vk::PhysicalDeviceSynchronization2FeaturesKHR>();
+        device_chain.unlink<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>();
+        device_chain.unlink<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>();
+    }
     if (!robustness2) {
         device_chain.unlink<vk::PhysicalDeviceRobustness2FeaturesEXT>();
     }
