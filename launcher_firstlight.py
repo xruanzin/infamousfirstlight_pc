@@ -299,9 +299,22 @@ class FirstLightLauncher:
         except Exception as exc:
             self.events.put(("reader_error", (generation, str(exc))))
 
-    def http_bytes(self, url):
-        request = urllib.request.Request(url, headers={"User-Agent": HTTP_USER_AGENT, "Cache-Control": "no-cache"})
-        with urllib.request.urlopen(request, timeout=20) as response:
+    def cache_bust_url(self, url):
+        separator = "&" if "?" in url else "?"
+        return "%s%snocache=%d" % (url, separator, time.time_ns())
+
+    def http_bytes(self, url, cache_bust=False):
+        if cache_bust:
+            url = self.cache_bust_url(url)
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": HTTP_USER_AGENT,
+                "Cache-Control": "no-cache, no-store, max-age=0",
+                "Pragma": "no-cache",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
             return response.read()
 
     def atomic_replace(self, path, data):
@@ -326,7 +339,7 @@ class FirstLightLauncher:
 
     def update_worker(self):
         try:
-            manifest_data = self.http_bytes(UPDATE_MANIFEST_URL)
+            manifest_data = self.http_bytes(UPDATE_MANIFEST_URL, cache_bust=True)
             manifest = json.loads(manifest_data.decode("utf-8"))
             if manifest.get("schema") != 1 or not isinstance(manifest.get("files"), list):
                 raise RuntimeError("manifesto de atualização incompatível")
@@ -343,15 +356,19 @@ class FirstLightLauncher:
                     continue
                 self.events.put(("update_status", "Baixando " + rel + "..."))
                 try:
-                    data = self.http_bytes(url)
+                    data = self.http_bytes(url, cache_bust=True)
                 except urllib.error.HTTPError as exc:
                     if not required and exc.code == 404:
                         skipped.append(rel)
                         continue
                     raise
                 expected = item.get("sha256")
-                if expected and hashlib.sha256(data).hexdigest().lower() != str(expected).lower():
-                    raise RuntimeError("SHA-256 inválido para " + rel)
+                remote_sha256 = hashlib.sha256(data).hexdigest().lower()
+                if expected and remote_sha256 != str(expected).lower():
+                    raise RuntimeError(
+                        "SHA-256 inválido para %s (manifesto=%s baixado=%s)"
+                        % (rel, str(expected).lower(), remote_sha256)
+                    )
 
                 destination = os.path.abspath(os.path.join(self.base, rel.replace("/", os.sep)))
                 base_prefix = os.path.abspath(self.base) + os.sep
@@ -359,12 +376,14 @@ class FirstLightLauncher:
                     raise RuntimeError("caminho inválido no manifesto: " + rel)
 
                 old = None
+                local_sha256 = None
                 try:
                     with open(destination, "rb") as f:
                         old = f.read()
+                    local_sha256 = hashlib.sha256(old).hexdigest().lower()
                 except OSError:
                     pass
-                if old == data:
+                if local_sha256 == remote_sha256:
                     unchanged.append(rel)
                     continue
 
@@ -382,6 +401,13 @@ class FirstLightLauncher:
                     changed.append(rel + " (reinício pendente)")
                 else:
                     self.atomic_replace(destination, data)
+                    with open(destination, "rb") as f:
+                        installed_sha256 = hashlib.sha256(f.read()).hexdigest().lower()
+                    if installed_sha256 != remote_sha256:
+                        raise RuntimeError(
+                            "falha ao verificar arquivo instalado: %s (esperado=%s instalado=%s)"
+                            % (rel, remote_sha256, installed_sha256)
+                        )
                     changed.append(rel)
 
             state = {
