@@ -279,6 +279,28 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
         flags |= vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
     }
 
+    // First Light/AMD A/B: the large BC6H array still crashes at amdvlk64.dll+0xebbbb
+    // with exact host layers (1536) and without Storage usage. Remove only
+    // BlockTexelViewCompatible for large BC6H arrays; keep MutableFormat/ExtendedUsage so this
+    // remains a valid Vulkan image-create flag combination and changes one variable at a time.
+    static const bool fl_bc6h_no_block_texel_view = [] {
+        const char* value = std::getenv("FL_BC6H_NO_BLOCK_TEXEL_VIEW");
+        return value && value[0] == '1';
+    }();
+    const bool fl_is_bc6h = info.pixel_format == vk::Format::eBc6HUfloatBlock ||
+                            info.pixel_format == vk::Format::eBc6HSfloatBlock;
+    if (fl_bc6h_no_block_texel_view && fl_is_bc6h && info.HostLayers() >= 1024 &&
+        (flags & vk::ImageCreateFlagBits::eBlockTexelViewCompatible)) {
+        flags &= ~vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
+        if (FlGpuResourceTrace()) {
+            std::printf(
+                "GPU: FL BC6H no-block-texel-view guest=0x%llx guestLayers=%u hostLayers=%u flags=0x%x\\n",
+                static_cast<unsigned long long>(info.guest_address), info.resources.layers,
+                info.HostLayers(), u32(flags));
+            std::fflush(stdout);
+        }
+    }
+
     usage_flags = ImageUsageFlags(instance, info);
     format_features = FormatFeatureFlags(usage_flags);
     if (info.props.is_depth) {
