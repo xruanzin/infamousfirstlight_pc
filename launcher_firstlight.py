@@ -230,10 +230,20 @@ class FirstLightLauncher:
             env["PATH"] = dzn_dir + os.pathsep + env.get("PATH", "")
             env["FL_GPU_BACKEND"] = "dzn-d3d12"
             env.setdefault("MESA_D3D12_DEFAULT_ADAPTER_NAME", "AMD Radeon")
+
+            # Keep third-party Vulkan overlays/injectors out of the DZN chain. RTSS/MSI
+            # Afterburner, capture tools and other implicit layers can hook vkCreateInstance
+            # before DZN and crash even though the AMD Vulkan ICD is no longer loaded.
+            # This is the Vulkan loader's documented global implicit-layer filter.
+            env["VK_LOADER_LAYERS_DISABLE"] = "~implicit~"
+            env.pop("VK_LOADER_LAYERS_ENABLE", None)
+            env.pop("VK_LOADER_LAYERS_ALLOW", None)
+            env.pop("VK_INSTANCE_LAYERS", None)
         else:
             # Do not inherit an override created by a previous launcher invocation.
             env.pop("VK_DRIVER_FILES", None)
             env.pop("VK_ICD_FILENAMES", None)
+            env.pop("VK_LOADER_LAYERS_DISABLE", None)
             env["FL_GPU_BACKEND"] = "native-vulkan"
         return env
 
