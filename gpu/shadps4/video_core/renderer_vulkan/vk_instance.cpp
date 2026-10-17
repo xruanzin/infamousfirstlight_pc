@@ -66,6 +66,29 @@ vk::FormatProperties3 GetFormatProperties(vk::PhysicalDevice physical, vk::Forma
         .pNext = &properties3,
     };
     physical.getFormatProperties2(format, &properties2);
+
+    // VkFormatProperties3 / VK_KHR_format_feature_flags2 is core in Vulkan 1.3. On Vulkan 1.2
+    // drivers such as Mesa Dozen the pNext struct can be ignored, leaving all 64-bit feature
+    // masks zero even though the legacy VkFormatProperties fields are populated. Promote those
+    // legacy masks so the renderer gets the real format capabilities instead of treating every
+    // format as unsupported.
+    const bool props3_empty =
+        !properties3.linearTilingFeatures && !properties3.optimalTilingFeatures &&
+        !properties3.bufferFeatures;
+    const auto& legacy = properties2.formatProperties;
+    const bool legacy_nonempty =
+        legacy.linearTilingFeatures || legacy.optimalTilingFeatures || legacy.bufferFeatures;
+    if (props3_empty && legacy_nonempty) {
+        properties3.linearTilingFeatures =
+            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(legacy.linearTilingFeatures))};
+        properties3.optimalTilingFeatures =
+            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(legacy.optimalTilingFeatures))};
+        properties3.bufferFeatures =
+            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(legacy.bufferFeatures))};
+    }
     return properties3;
 }
 
