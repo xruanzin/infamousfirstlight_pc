@@ -40,7 +40,7 @@
       "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-probe/bb-probe.exe",
       "required": false,
       "kind": "core",
-      "sha256": "a1bc1050cef24ed145bd9b7e5ab9bfd876bb3ee5276316b4314d8b69da21f572"
+      "sha256": "dfa1a14b746f521a45b5788f9d2694d5bb44f447508d6416ec74a5d79e9d051a"
     }
   ]
 }
