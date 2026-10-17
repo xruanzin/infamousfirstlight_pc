@@ -52,10 +52,28 @@ static vk::ImageUsageFlags ImageUsageFlags(const Vulkan::Instance& instance,
             usage |= vk::ImageUsageFlagBits::eStorage;
         }
     } else {
-        // Similarly to above, we specify storage usage. This is typically not supported by
-        // compressed formats, but may be used for uncompressed views. In order to satisfy this,
-        // we will also specify the extended usage bit.
-        usage |= vk::ImageUsageFlagBits::eStorage;
+        // Similarly to above, we normally specify storage usage. This is typically not supported
+        // by compressed formats, but may be used for uncompressed views with ExtendedUsage.
+        //
+        // First Light/AMD A/B: the proprietary Windows driver crashes immediately after creating
+        // the large BC6H array view even when its host layer count is reduced from 2048 to 1536.
+        // Keep every other property identical and remove only speculative Storage from BC6H.
+        static const bool fl_bc6h_no_storage = [] {
+            const char* value = std::getenv("FL_BC6H_NO_STORAGE");
+            return value && value[0] == '1';
+        }();
+        const bool is_bc6h = info.pixel_format == vk::Format::eBc6HUfloatBlock ||
+                             info.pixel_format == vk::Format::eBc6HSfloatBlock;
+        if (!(fl_bc6h_no_storage && is_bc6h)) {
+            usage |= vk::ImageUsageFlagBits::eStorage;
+        } else if (FlGpuResourceTrace()) {
+            std::printf(
+                "GPU: FL BC6H no-storage guest=0x%llx format=%s guestLayers=%u hostLayers=%u\\n",
+                static_cast<unsigned long long>(info.guest_address),
+                vk::to_string(info.pixel_format).c_str(), info.resources.layers,
+                info.HostLayers());
+            std::fflush(stdout);
+        }
     }
 
     return usage;
