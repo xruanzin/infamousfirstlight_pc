@@ -237,6 +237,17 @@ class FirstLightLauncher:
             # This is the Vulkan loader's documented global implicit-layer filter.
             env["VK_LOADER_LAYERS_DISABLE"] = "~implicit~"
             env["VK_LOADER_DEBUG"] = "error,warn,driver"
+
+            # Mesa Dozen on Windows requires DXIL.dll for its validator by default.
+            # The portable DZN bring-up path intentionally skips the validator so the
+            # Vulkan-over-D3D12 ICD can initialize even when DXIL.dll is not installed.
+            # Keep this scoped to the DZN backend only.
+            existing_dzn_debug = env.get("DZN_DEBUG", "")
+            dzn_flags = [x.strip() for x in existing_dzn_debug.split(",") if x.strip()]
+            if "experimental" not in dzn_flags:
+                dzn_flags.append("experimental")
+            env["DZN_DEBUG"] = ",".join(dzn_flags)
+
             env.pop("VK_LOADER_LAYERS_ENABLE", None)
             env.pop("VK_LOADER_LAYERS_ALLOW", None)
             env.pop("VK_INSTANCE_LAYERS", None)
@@ -245,6 +256,7 @@ class FirstLightLauncher:
             env.pop("VK_DRIVER_FILES", None)
             env.pop("VK_ICD_FILENAMES", None)
             env.pop("VK_LOADER_LAYERS_DISABLE", None)
+            env.pop("DZN_DEBUG", None)
             env["FL_GPU_BACKEND"] = "native-vulkan"
         return env
 
