@@ -226,7 +226,7 @@ class FirstLightLauncher:
             # VK_DRIVER_FILES overrides normal Vulkan ICD discovery. With only the DZN
             # manifest listed, amdvlk64.dll is not selected by the Vulkan loader.
             env["VK_DRIVER_FILES"] = manifest
-            env.pop("VK_ICD_FILENAMES", None)
+            env["VK_ICD_FILENAMES"] = manifest
             env["PATH"] = dzn_dir + os.pathsep + env.get("PATH", "")
             env["FL_GPU_BACKEND"] = "dzn-d3d12"
             env.setdefault("MESA_D3D12_DEFAULT_ADAPTER_NAME", "AMD Radeon")
