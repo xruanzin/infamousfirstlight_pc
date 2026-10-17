@@ -236,6 +236,7 @@ class FirstLightLauncher:
             # before DZN and crash even though the AMD Vulkan ICD is no longer loaded.
             # This is the Vulkan loader's documented global implicit-layer filter.
             env["VK_LOADER_LAYERS_DISABLE"] = "~implicit~"
+            env["VK_LOADER_DEBUG"] = "error,warn,driver"
             env.pop("VK_LOADER_LAYERS_ENABLE", None)
             env.pop("VK_LOADER_LAYERS_ALLOW", None)
             env.pop("VK_INSTANCE_LAYERS", None)
