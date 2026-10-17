@@ -206,9 +206,17 @@ Instance::Instance(const Frontend::WindowSystemInfo& window_info, s32 physical_d
     }
 
     CreateDevice();
+    std::printf("GPU: init milestone: logical device ready\n");
+    std::fflush(stdout);
     CollectPhysicalMemoryInfo();
+    std::printf("GPU: init milestone: physical memory info ready\n");
+    std::fflush(stdout);
     CollectImageFormatInfo();
+    std::printf("GPU: init milestone: image format info ready\n");
+    std::fflush(stdout);
     CollectToolingInfo();
+    std::printf("GPU: init milestone: instance initialization complete\n");
+    std::fflush(stdout);
 }
 
 Instance::~Instance() {
@@ -932,6 +940,19 @@ void Instance::CollectToolingInfo() const {
         // Intel: Causes crash on start.
         return;
     }
+
+    // vkGetPhysicalDeviceToolProperties is a Vulkan 1.3 core entrypoint. Mesa Dozen currently
+    // exposes Vulkan 1.2 on D3D12; calling the core 1.3 entrypoint through Vulkan-Hpp there can
+    // dereference a null dispatch pointer. Tooling info is diagnostic-only, so skip it on the
+    // 1.2 compatibility path instead of making renderer bring-up depend on this optional query.
+    if (properties.apiVersion < VK_API_VERSION_1_3) {
+        std::printf("GPU: tooling info skipped on Vulkan %u.%u compatibility path\n",
+                    VK_VERSION_MAJOR(properties.apiVersion),
+                    VK_VERSION_MINOR(properties.apiVersion));
+        std::fflush(stdout);
+        return;
+    }
+
     const auto [tools_result, tools] = physical_device.getToolProperties();
     if (tools_result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "Could not get Vulkan tool properties: {}",
