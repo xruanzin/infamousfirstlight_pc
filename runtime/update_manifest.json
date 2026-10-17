@@ -34,7 +34,7 @@
       "required": false,
       "kind": "zip_bundle",
       "extract_to": "runtime/dzn",
-      "sha256": "0b4d521c0ff05e158fa120115627b92170ffb436d9274c44e6eab071d0da5a0d"
+      "sha256": "ad789afb2f8b166a3bad38853cab842c40d89f2af723595333f6fe67ddfb5e5c"
     },
     {
       "path": "FirstLightLauncher-next.exe",
