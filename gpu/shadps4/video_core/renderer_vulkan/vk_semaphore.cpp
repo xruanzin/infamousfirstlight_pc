@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <limits>
+#include <cstdio>
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_semaphore.h"
 
@@ -12,6 +13,8 @@ namespace Vulkan {
 constexpr u64 WAIT_TIMEOUT = std::numeric_limits<u64>::max();
 
 Semaphore::Semaphore(const Instance& instance_) : instance{instance_} {
+    std::printf("GPU: init milestone: Semaphore create begin\n");
+    std::fflush(stdout);
     const vk::StructureChain semaphore_chain = {
         vk::SemaphoreCreateInfo{},
         vk::SemaphoreTypeCreateInfo{
@@ -24,6 +27,8 @@ Semaphore::Semaphore(const Instance& instance_) : instance{instance_} {
     ASSERT_MSG(semaphore_result == vk::Result::eSuccess, "Failed to create master semaphore: {}",
                vk::to_string(semaphore_result));
     semaphore = std::move(sem);
+    std::printf("GPU: init milestone: Semaphore ready\n");
+    std::fflush(stdout);
 }
 
 Semaphore::~Semaphore() = default;

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdio>
 #include "gnm_error.h"
 #include "gnmdriver.h"
 
@@ -2919,8 +2920,16 @@ int PS4_SYSV_ABI Func_F916890425496553() {
 
 void RegisterLib(Core::Loader::SymbolsResolver* sym) {
     LOG_INFO(Lib_GnmDriver, "Initializing presenter");
+    std::printf("GPU: init milestone: Liverpool create begin\n");
+    std::fflush(stdout);
     liverpool = std::make_unique<AmdGpu::Liverpool>();
+    std::printf("GPU: init milestone: Liverpool ready\n");
+    std::fflush(stdout);
+    std::printf("GPU: init milestone: Presenter create begin\n");
+    std::fflush(stdout);
     presenter = std::make_unique<Vulkan::Presenter>(*g_window, liverpool.get());
+    std::printf("GPU: init milestone: Presenter create returned\n");
+    std::fflush(stdout);
 
     const s32 result = sceKernelGetCompiledSdkVersion(&sdk_version);
     if (result != ORBIS_OK) {

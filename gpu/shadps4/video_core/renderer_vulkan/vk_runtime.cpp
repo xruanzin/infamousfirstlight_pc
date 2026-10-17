@@ -175,11 +175,15 @@ static u32 BufferImageCopySize(const vk::BufferImageCopy& copy, const vk::Format
 
 Runtime::Runtime(const Instance& instance_, Scheduler& scheduler_)
     : instance{instance_}, scheduler{scheduler_}, staging_pool{instance_, scheduler_} {
+    std::printf("GPU: init milestone: Runtime body begin\n");
+    std::fflush(stdout);
     blit_helper = std::make_unique<VideoCore::BlitHelper>(instance, scheduler);
 
     memory_barrier.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
     memory_barrier.dstAccessMask =
         vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
+    std::printf("GPU: init milestone: Runtime ready\n");
+    std::fflush(stdout);
 }
 
 void Runtime::TickFrame() {

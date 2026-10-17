@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstddef>
+#include <cstdio>
 #include <optional>
 
 #include "common/assert.h"
@@ -63,6 +64,8 @@ constexpr std::size_t COMMAND_BUFFER_POOL_SIZE = 4;
 
 CommandPool::CommandPool(const Instance& instance, Semaphore* work_semaphore)
     : ResourcePool{work_semaphore, COMMAND_BUFFER_POOL_SIZE}, instance{instance} {
+    std::printf("GPU: init milestone: CommandPool create begin\n");
+    std::fflush(stdout);
     const vk::CommandPoolCreateInfo pool_create_info = {
         .flags = vk::CommandPoolCreateFlagBits::eTransient |
                  vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -73,12 +76,18 @@ CommandPool::CommandPool(const Instance& instance, Semaphore* work_semaphore)
     ASSERT_MSG(pool_result == vk::Result::eSuccess, "Failed to create command pool: {}",
                vk::to_string(pool_result));
     cmd_pool = std::move(pool);
+    std::printf("GPU: init milestone: CommandPool handle ready\n");
+    std::fflush(stdout);
     SetObjectName(device, *cmd_pool, "CommandPool");
+    std::printf("GPU: init milestone: CommandPool ready\n");
+    std::fflush(stdout);
 }
 
 CommandPool::~CommandPool() = default;
 
 void CommandPool::Allocate(std::size_t begin, std::size_t end) {
+    std::printf("GPU: init milestone: command buffer allocate begin %zu..%zu\n", begin, end);
+    std::fflush(stdout);
     cmd_buffers.resize(end);
 
     const vk::CommandBufferAllocateInfo buffer_alloc_info = {
@@ -95,6 +104,8 @@ void CommandPool::Allocate(std::size_t begin, std::size_t end) {
     for (std::size_t i = begin; i < end; ++i) {
         SetObjectName(device, cmd_buffers[i], "CommandPool: Command Buffer {}", i);
     }
+    std::printf("GPU: init milestone: command buffer allocate ready\n");
+    std::fflush(stdout);
 }
 
 vk::CommandBuffer CommandPool::Commit() {

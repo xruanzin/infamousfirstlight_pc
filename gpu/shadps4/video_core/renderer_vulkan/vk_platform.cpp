@@ -14,6 +14,7 @@
 #endif
 
 #include <vector>
+#include <cstdio>
 #include <fmt/ranges.h>
 
 #include "common/assert.h"
@@ -61,6 +62,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
 }
 
 vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::WindowSDL& emu_window) {
+    std::printf("GPU: init milestone: CreateSurface begin\n");
+    std::fflush(stdout);
     const auto& window_info = emu_window.GetWindowInfo();
     vk::SurfaceKHR surface{};
 
@@ -122,6 +125,8 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::WindowSDL& e
         UNREACHABLE();
     }
 
+    std::printf("GPU: init milestone: CreateSurface ready\n");
+    std::fflush(stdout);
     return surface;
 }
 

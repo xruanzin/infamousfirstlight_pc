@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <cstdio>
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/emulator_settings.h"
@@ -20,11 +21,19 @@ static constexpr vk::SurfaceFormatKHR SURFACE_FORMAT_HDR = {
 
 Swapchain::Swapchain(const Instance& instance_, const Frontend::WindowSDL& window_)
     : instance{instance_}, window{window_}, surface{CreateSurface(instance.GetInstance(), window)} {
+    std::printf("GPU: init milestone: Swapchain body begin\n");
+    std::fflush(stdout);
     FindPresentFormat();
     FindPresentMode();
 
+    std::printf("GPU: init milestone: Swapchain format/mode ready\n");
+    std::fflush(stdout);
     Create(window.GetWidth(), window.GetHeight());
+    std::printf("GPU: init milestone: Swapchain images ready\n");
+    std::fflush(stdout);
     ImGui::Core::Initialize(instance, window, image_count, surface_format.format);
+    std::printf("GPU: init milestone: Swapchain ready\n");
+    std::fflush(stdout);
 }
 
 Swapchain::~Swapchain() {

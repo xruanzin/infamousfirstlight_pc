@@ -25,6 +25,7 @@
 #include <chrono>
 #include <cmath>
 #include <csetjmp>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
@@ -134,6 +135,8 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
       swapchain{instance, window}, runtime{instance, draw_scheduler},
       rasterizer{std::make_unique<Rasterizer>(instance, draw_scheduler, runtime, liverpool)},
       texture_cache{rasterizer->GetTextureCache()} {
+    std::printf("GPU: init milestone: Presenter member initialization complete\n");
+    std::fflush(stdout);
     const u32 num_images = swapchain.GetImageCount();
     const vk::Device device = instance.GetDevice();
 
@@ -156,6 +159,8 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
     fsr_pass.Create(device, instance.GetAllocator(), num_images);
     pp_pass.Create(device, swapchain.GetSurfaceFormat().format);
     BbOverlay::Init(instance, swapchain.GetSurfaceFormat().format, num_images);
+    std::printf("GPU: init milestone: Presenter ready\n");
+    std::fflush(stdout);
 
 }
 

@@ -32,6 +32,12 @@ concept VulkanHandleType = vk::isVulkanHandleType<T>::value;
 
 template <VulkanHandleType HandleType>
 void SetObjectName(vk::Device device, const HandleType& handle, std::string_view debug_name) {
+    // VK_EXT_debug_utils is diagnostic-only. Some Vulkan 1.2 compatibility ICDs may create
+    // the instance/device without exposing vkSetDebugUtilsObjectNameEXT through the device
+    // dispatcher. Never let an optional object label become a null-function-pointer crash.
+    if (!VULKAN_HPP_DEFAULT_DISPATCHER.vkSetDebugUtilsObjectNameEXT) {
+        return;
+    }
     const vk::DebugUtilsObjectNameInfoEXT name_info = {
         .objectType = HandleType::objectType,
         .objectHandle = reinterpret_cast<u64>(static_cast<typename HandleType::NativeType>(handle)),

@@ -28,6 +28,9 @@ std::mutex Scheduler::submit_mutex;
 
 Scheduler::Scheduler(const Instance& instance, bool threaded_recording)
     : instance{instance}, work_semaphore{instance}, command_pool{instance, &work_semaphore} {
+    std::printf("GPU: init milestone: Scheduler body begin threaded=%u\n",
+                threaded_recording ? 1u : 0u);
+    std::fflush(stdout);
     // bbport: BB_VK_RECORD_THREAD=0 records on the calling thread.
     const char* env = std::getenv("BB_VK_RECORD_THREAD");
     if (threaded_recording && !(env && env[0] == '0')) {
@@ -38,9 +41,15 @@ Scheduler::Scheduler(const Instance& instance, bool threaded_recording)
 #if TRACY_GPU_ENABLED
     profiler_scope = reinterpret_cast<tracy::VkCtxScope*>(std::malloc(sizeof(tracy::VkCtxScope)));
 #endif
+    std::printf("GPU: init milestone: Scheduler first command buffer begin\n");
+    std::fflush(stdout);
     AllocateWorkerCommandBuffers();
+    std::printf("GPU: init milestone: Scheduler first command buffer ready\n");
+    std::fflush(stdout);
     priority_pending_ops_thread =
         std::jthread(std::bind_front(&Scheduler::PriorityPendingOpsThread, this));
+    std::printf("GPU: init milestone: Scheduler ready\n");
+    std::fflush(stdout);
 }
 
 Scheduler::~Scheduler() {
@@ -377,12 +386,18 @@ void Scheduler::PopPendingOperations() {
 }
 
 void Scheduler::AllocateWorkerCommandBuffers() {
+    std::printf("GPU: init milestone: AllocateWorkerCommandBuffers enter\n");
+    std::fflush(stdout);
     const vk::CommandBufferBeginInfo begin_info = {
         .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
     };
 
     current_cmdbuf = command_pool.Commit();
+    std::printf("GPU: init milestone: command buffer committed\n");
+    std::fflush(stdout);
     Check(current_cmdbuf.begin(begin_info));
+    std::printf("GPU: init milestone: command buffer recording begun\n");
+    std::fflush(stdout);
 
     // Invalidate dynamic state so it gets applied to the new command buffer.
     dynamic_state.Invalidate();
