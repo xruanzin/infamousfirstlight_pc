@@ -41,7 +41,7 @@
       "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-launcher/FirstLightLauncher-next.exe",
       "required": false,
       "kind": "launcher",
-      "sha256": "d1497e209c729e9135f4f501a9fa5cde37799415e096837e3dbb04c38ad6abac"
+      "sha256": "fb9c2c2e841efffe787202f37fac29717d491fb8eea94127b864a4b7631322d5"
     },
     {
       "path": "bin/bb-probe.exe",
