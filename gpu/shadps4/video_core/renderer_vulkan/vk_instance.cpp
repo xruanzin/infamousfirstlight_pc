@@ -280,24 +280,37 @@ bool Instance::CreateDevice() {
         return false;
     };
 
-    // Required
-    ASSERT_MSG(add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
-               "Required Vulkan extension unavailable: {}", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    ASSERT_MSG(add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME),
-               "Required Vulkan extension unavailable: {}", VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    ASSERT_MSG(add_extension(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME),
-               "Required Vulkan extension unavailable: {}",
-               VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    ASSERT_MSG(add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME),
-               "Required Vulkan extension unavailable: {}", VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
-
-    // Mesa Dozen currently exposes Vulkan 1.2 on D3D12, while implementing the renderer's
-    // essential Vulkan 1.3 functionality through the pre-promotion extensions. Enable those
-    // extensions explicitly instead of rejecting the adapter solely on its core API version.
     const bool dozen_vulkan12 =
         vendor_name.find("Dozen") != std::string::npos &&
         properties.apiVersion >= VK_API_VERSION_1_2 &&
         properties.apiVersion < TargetVulkanApiVersion;
+
+    // Required on normal Vulkan drivers. Dozen lacks push descriptors and robustness2,
+    // but this renderer already has a pooled-descriptor fallback; DZN also tolerates null
+    // handles in its descriptor update path by leaving those slots unwritten.
+    ASSERT_MSG(add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
+               "Required Vulkan extension unavailable: {}", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    push_descriptors = add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    if (!push_descriptors) {
+        ASSERT_MSG(dozen_vulkan12,
+                   "Required Vulkan extension unavailable: {}", VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+        std::printf("GPU: DZN fallback: push descriptors unavailable; using pooled descriptor sets\n");
+        std::fflush(stdout);
+    }
+    ASSERT_MSG(add_extension(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME),
+               "Required Vulkan extension unavailable: {}",
+               VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
+    const bool robustness2 = add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+    if (!robustness2) {
+        ASSERT_MSG(dozen_vulkan12,
+                   "Required Vulkan extension unavailable: {}", VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+        std::printf("GPU: DZN fallback: robustness2 unavailable; using core robustBufferAccess\n");
+        std::fflush(stdout);
+    }
+
+    // Mesa Dozen currently exposes Vulkan 1.2 on D3D12, while implementing the renderer's
+    // essential Vulkan 1.3 functionality through the pre-promotion extensions. Enable those
+    // extensions explicitly instead of rejecting the adapter solely on its core API version.
     if (dozen_vulkan12) {
         ASSERT_MSG(add_extension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME),
                    "DZN Vulkan 1.2 compatibility requires: {}",
@@ -314,12 +327,14 @@ bool Instance::CreateDevice() {
     }
 
     const auto robustness2_features = feature_chain.get<vk::PhysicalDeviceRobustness2FeaturesEXT>();
-    ASSERT_MSG(robustness2_features.robustBufferAccess2,
-               "Required Vulkan feature unavailable: robustBufferAccess2");
-    ASSERT_MSG(robustness2_features.robustImageAccess2,
-               "Required Vulkan feature unavailable: robustImageAccess2");
-    ASSERT_MSG(robustness2_features.nullDescriptor,
-               "Required Vulkan feature unavailable: nullDescriptor");
+    if (robustness2) {
+        ASSERT_MSG(robustness2_features.robustBufferAccess2,
+                   "Required Vulkan feature unavailable: robustBufferAccess2");
+        ASSERT_MSG(robustness2_features.robustImageAccess2,
+                   "Required Vulkan feature unavailable: robustImageAccess2");
+        ASSERT_MSG(robustness2_features.nullDescriptor,
+                   "Required Vulkan feature unavailable: nullDescriptor");
+    }
 
     // Optional
     maintenance_5 = add_extension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
@@ -620,6 +635,9 @@ bool Instance::CreateDevice() {
         },
     };
 
+    if (!robustness2) {
+        device_chain.unlink<vk::PhysicalDeviceRobustness2FeaturesEXT>();
+    }
     if (!custom_border_color) {
         device_chain.unlink<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
     }
