@@ -390,7 +390,7 @@ public:
 
     /// Returns the maximum number of push descriptors.
     u32 MaxPushDescriptors() const {
-        return push_descriptor_props.maxPushDescriptors;
+        return push_descriptors ? push_descriptor_props.maxPushDescriptors : 0;
     }
 
     /// Returns the maximum size of a single VkDeviceMemory
@@ -546,6 +546,7 @@ private:
     std::unordered_map<vk::Format, vk::FormatProperties3> format_properties;
     TracyVkCtx profiler_context{};
     u32 queue_family_index{0};
+    bool push_descriptors{};
     bool custom_border_color{};
     bool fragment_shader_barycentric{};
     bool amd_shader_explicit_vertex_parameter{};
