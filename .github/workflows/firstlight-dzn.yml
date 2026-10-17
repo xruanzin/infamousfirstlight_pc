@@ -36,7 +36,22 @@ jobs:
           mkdir -p out/dzn
 
           declare -A seen
-          queue=(/clang64/bin/vulkan_dzn.dll)
+          # Mesa's DZN loads some shader compiler helpers dynamically, so ldd(vulkan_dzn.dll)
+          # alone is not enough for a portable bundle. Seed the closure with the helpers shipped
+          # by the same Mesa package, then recursively copy all of their CLANG64 dependencies.
+          roots=(
+            /clang64/bin/vulkan_dzn.dll
+            /clang64/bin/clon12compiler.dll
+            /clang64/bin/libspirv_to_dxil.dll
+          )
+          queue=()
+          for root in "${roots[@]}"; do
+            if [[ -f "$root" ]]; then
+              queue+=("$root")
+            else
+              echo "::warning::Mesa DZN helper not found: $root"
+            fi
+          done
           while (("${#queue[@]}")); do
             dll="${queue[0]}"
             queue=("${queue[@]:1}")
@@ -52,6 +67,8 @@ jobs:
 
           cp -f /clang64/share/vulkan/icd.d/dzn_icd.x86_64.json out/dzn/dzn_icd.x86_64.json
           test -s out/dzn/vulkan_dzn.dll
+          test -s out/dzn/clon12compiler.dll
+          test -s out/dzn/libspirv_to_dxil.dll
           test -s out/dzn/dzn_icd.x86_64.json
           echo "DZN bundle files:"
           ls -lh out/dzn
@@ -91,7 +108,11 @@ jobs:
           $found = $false
           foreach ($file in $manifest.files) {
             if ($file.path -eq "runtime/dzn_bundle.zip") {
-              $file.sha256 = $digest
+              if ($file.PSObject.Properties.Name -contains "sha256") {
+                $file.sha256 = $digest
+              } else {
+                $file | Add-Member -NotePropertyName sha256 -NotePropertyValue $digest
+              }
               $found = $true
             }
           }
