@@ -293,12 +293,23 @@ vk::UniqueInstance CreateInstance(Frontend::WindowSystemType window_type, bool e
         dlss->AppendInstanceExtensions(extensions);
     }
 
+    // Request only the Vulkan version the renderer actually requires. vkEnumerateInstanceVersion
+    // reports the loader's maximum version, not necessarily what the selected ICD can create.
+    // Asking for the loader maximum (for example 1.4) can make an otherwise usable DZN ICD reject
+    // vkCreateInstance with VK_ERROR_INCOMPATIBLE_DRIVER even though this renderer targets 1.3.
+    const u32 requested_api_version = TargetVulkanApiVersion;
+    std::printf(
+        "GPU: Vulkan instance versions loader=%u.%u requested=%u.%u\\n",
+        VK_VERSION_MAJOR(available_version), VK_VERSION_MINOR(available_version),
+        VK_VERSION_MAJOR(requested_api_version), VK_VERSION_MINOR(requested_api_version));
+    std::fflush(stdout);
+
     const vk::ApplicationInfo application_info = {
         .pApplicationName = "shadPS4",
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
         .pEngineName = "shadPS4 Vulkan",
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-        .apiVersion = available_version,
+        .apiVersion = requested_api_version,
     };
 
     const std::string extensions_string = fmt::format("{}", fmt::join(extensions, ", "));
