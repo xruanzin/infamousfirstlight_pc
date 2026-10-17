@@ -33,7 +33,8 @@
       "url": "https://github.com/xruanzin/infamousfirstlight_pc/releases/download/firstlight-dev-dzn/firstlight-dzn.zip",
       "required": false,
       "kind": "zip_bundle",
-      "extract_to": "runtime/dzn"
+      "extract_to": "runtime/dzn",
+      "sha256": "8df9dd3329fa929fbf11ce3ae3f76e4569926ca3c2c1dfb8f7c17537e72ebf39"
     },
     {
       "path": "FirstLightLauncher-next.exe",
