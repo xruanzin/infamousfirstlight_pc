@@ -190,10 +190,20 @@ Instance::Instance(const Frontend::WindowSystemInfo& window_info, s32 physical_d
     properties = physical_device.getProperties();
     memory_properties = physical_device.getMemoryProperties();
     CollectDeviceParameters();
-    ASSERT_MSG(properties.apiVersion >= TargetVulkanApiVersion,
+    const bool dozen_vulkan12 =
+        vendor_name.find("Dozen") != std::string::npos &&
+        properties.apiVersion >= VK_API_VERSION_1_2 &&
+        properties.apiVersion < TargetVulkanApiVersion;
+    ASSERT_MSG(properties.apiVersion >= TargetVulkanApiVersion || dozen_vulkan12,
                "Vulkan {}.{} is required, but only {}.{} is supported by device!",
                VK_VERSION_MAJOR(TargetVulkanApiVersion), VK_VERSION_MINOR(TargetVulkanApiVersion),
                VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion));
+    if (dozen_vulkan12) {
+        std::printf(
+            "GPU: First Light DZN compatibility path: Vulkan %u.%u core + Vulkan 1.3 feature extensions\n",
+            VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion));
+        std::fflush(stdout);
+    }
 
     CreateDevice();
     CollectPhysicalMemoryInfo();
@@ -280,6 +290,28 @@ bool Instance::CreateDevice() {
                VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     ASSERT_MSG(add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+
+    // Mesa Dozen currently exposes Vulkan 1.2 on D3D12, while implementing the renderer's
+    // essential Vulkan 1.3 functionality through the pre-promotion extensions. Enable those
+    // extensions explicitly instead of rejecting the adapter solely on its core API version.
+    const bool dozen_vulkan12 =
+        vendor_name.find("Dozen") != std::string::npos &&
+        properties.apiVersion >= VK_API_VERSION_1_2 &&
+        properties.apiVersion < TargetVulkanApiVersion;
+    if (dozen_vulkan12) {
+        ASSERT_MSG(add_extension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME),
+                   "DZN Vulkan 1.2 compatibility requires: {}",
+                   VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        ASSERT_MSG(add_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME),
+                   "DZN Vulkan 1.2 compatibility requires: {}",
+                   VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+        ASSERT_MSG(add_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME),
+                   "DZN Vulkan 1.2 compatibility requires: {}",
+                   VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
+        ASSERT_MSG(add_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME),
+                   "DZN Vulkan 1.2 compatibility requires: {}",
+                   VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+    }
 
     const auto robustness2_features = feature_chain.get<vk::PhysicalDeviceRobustness2FeaturesEXT>();
     ASSERT_MSG(robustness2_features.robustBufferAccess2,
@@ -723,7 +755,7 @@ void Instance::CreateAllocator() {
         .device = *device,
         .pVulkanFunctions = &functions,
         .instance = *instance,
-        .vulkanApiVersion = TargetVulkanApiVersion,
+        .vulkanApiVersion = std::min(properties.apiVersion, TargetVulkanApiVersion),
     };
 
     const VkResult result = vmaCreateAllocator(&allocator_info, &allocator);
