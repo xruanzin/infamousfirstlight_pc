@@ -7,6 +7,8 @@ import sys
 import threading
 import time
 import tkinter as tk
+import shutil
+import zipfile
 import urllib.error
 import urllib.request
 from tkinter import filedialog, messagebox, ttk
@@ -24,6 +26,9 @@ HTTP_USER_AGENT = "FirstLightLauncher/3.1"
 MAX_LIVE_LOG_CHARS = 350_000
 MAX_EVENTS_PER_TICK = 80
 POLL_BUDGET_SECONDS = 0.015
+
+BACKEND_D3D12 = "DirectX 12 (Mesa DZN)"
+BACKEND_VULKAN = "Vulkan nativo (AMD)"
 
 
 def portable_root():
@@ -55,6 +60,7 @@ class FirstLightLauncher:
         os.makedirs(self.runtime_dir, exist_ok=True)
 
         self.game_dir = tk.StringVar()
+        self.backend = tk.StringVar(value=BACKEND_D3D12)
         self.status = tk.StringVar(value="Pronto.")
         self.reason = tk.StringVar(value="Nenhum jogo executado nesta sessão.")
         self.runtime_status = tk.StringVar(value=self.runtime_description())
@@ -90,6 +96,22 @@ class FirstLightLauncher:
         self.path_entry.pack(side="left", fill="x", expand=True)
         ttk.Button(path_frame, text="Procurar...", command=self.browse_game).pack(side="left", padx=(8, 0))
 
+        backend_frame = ttk.LabelFrame(outer, text="Backend gráfico", padding=10)
+        backend_frame.pack(fill="x", pady=(10, 0))
+        ttk.Label(
+            backend_frame,
+            text="DirectX 12 usa Mesa DZN (Vulkan → D3D12) e evita o ICD amdvlk64.dll.",
+        ).pack(side="left")
+        self.backend_combo = ttk.Combobox(
+            backend_frame,
+            textvariable=self.backend,
+            values=(BACKEND_D3D12, BACKEND_VULKAN),
+            state="readonly",
+            width=30,
+        )
+        self.backend_combo.pack(side="right")
+        self.backend_combo.bind("<<ComboboxSelected>>", lambda _event: self.save_config())
+
         controls = ttk.Frame(outer)
         controls.pack(fill="x", pady=10)
 
@@ -120,13 +142,28 @@ class FirstLightLauncher:
         self.log = ScrolledText(log_frame, wrap="word", font=("Consolas", 9), state="disabled")
         self.log.pack(fill="both", expand=True)
 
+    def dzn_manifest_path(self):
+        return os.path.join(self.runtime_dir, "dzn", "dzn_icd.x86_64.json")
+
+    def dzn_ready(self):
+        dzn_dir = os.path.join(self.runtime_dir, "dzn")
+        return (
+            os.path.isfile(self.dzn_manifest_path())
+            and os.path.isfile(os.path.join(dzn_dir, "vulkan_dzn.dll"))
+        )
+
     def runtime_description(self):
         aliases = os.path.isfile(os.path.join(self.runtime_dir, "import_aliases.tsv"))
         native = os.path.isfile(os.path.join(self.runtime_dir, "firstlight_runtime.dll"))
+        dzn = self.dzn_ready()
         return (
-            "Hotfixes locais: aliases externos %s; módulo nativo %s. "
-            "O botão Atualizar port substitui somente esses arquivos, sem apagar jogo, saves, cache ou configuração."
-            % ("ativo" if aliases else "ausente", "ativo" if native else "ausente")
+            "Hotfixes locais: aliases externos %s; módulo nativo %s; DirectX 12/DZN %s. "
+            "O botão Atualizar port substitui somente arquivos do port, sem apagar jogo, saves, cache ou configuração."
+            % (
+                "ativo" if aliases else "ausente",
+                "ativo" if native else "ausente",
+                "disponível" if dzn else "ausente",
+            )
         )
 
     def load_config(self):
@@ -136,13 +173,23 @@ class FirstLightLauncher:
             value = data.get("game_dir")
             if isinstance(value, str):
                 self.game_dir.set(value)
+            backend = data.get("backend")
+            if backend in (BACKEND_D3D12, BACKEND_VULKAN):
+                self.backend.set(backend)
         except (OSError, ValueError, TypeError):
             pass
 
     def save_config(self):
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump({"game_dir": self.game_dir.get().strip()}, f, indent=2)
+                json.dump(
+                    {
+                        "game_dir": self.game_dir.get().strip(),
+                        "backend": self.backend.get(),
+                    },
+                    f,
+                    indent=2,
+                )
         except OSError:
             pass
 
@@ -172,6 +219,22 @@ class FirstLightLauncher:
                         env.setdefault(key, str(value))
         except (OSError, ValueError, TypeError):
             pass
+
+        if self.backend.get() == BACKEND_D3D12:
+            dzn_dir = os.path.join(self.runtime_dir, "dzn")
+            manifest = os.path.abspath(self.dzn_manifest_path())
+            # VK_DRIVER_FILES overrides normal Vulkan ICD discovery. With only the DZN
+            # manifest listed, amdvlk64.dll is not selected by the Vulkan loader.
+            env["VK_DRIVER_FILES"] = manifest
+            env.pop("VK_ICD_FILENAMES", None)
+            env["PATH"] = dzn_dir + os.pathsep + env.get("PATH", "")
+            env["FL_GPU_BACKEND"] = "dzn-d3d12"
+            env.setdefault("MESA_D3D12_DEFAULT_ADAPTER_NAME", "AMD Radeon")
+        else:
+            # Do not inherit an override created by a previous launcher invocation.
+            env.pop("VK_DRIVER_FILES", None)
+            env.pop("VK_ICD_FILENAMES", None)
+            env["FL_GPU_BACKEND"] = "native-vulkan"
         return env
 
     def validate_game(self, path):
@@ -235,6 +298,15 @@ class FirstLightLauncher:
             messagebox.showerror("Diretório inválido", error)
             self.status.set("Não iniciado.")
             self.reason.set(error)
+            return
+
+        if self.backend.get() == BACKEND_D3D12 and not self.dzn_ready():
+            messagebox.showerror(
+                "Backend DirectX 12 não instalado",
+                "O Mesa DZN não está instalado nesta pasta. Clique em 'Atualizar port' e tente novamente.",
+            )
+            self.status.set("DirectX 12/DZN ausente.")
+            self.reason.set("Atualize o port para baixar runtime\\dzn.")
             return
 
         bootstrap = os.path.join(self.base, "FirstLightBootstrap.exe")
@@ -327,6 +399,29 @@ class FirstLightLauncher:
             os.fsync(f.fileno())
         os.replace(temp, path)
 
+    def install_zip_bundle(self, archive_path, extract_rel):
+        target = os.path.abspath(os.path.join(self.base, extract_rel.replace("/", os.sep)))
+        base_prefix = os.path.abspath(self.base) + os.sep
+        if not target.startswith(base_prefix):
+            raise RuntimeError("destino de bundle inválido: " + extract_rel)
+        temp = target + ".new"
+        shutil.rmtree(temp, ignore_errors=True)
+        os.makedirs(temp, exist_ok=True)
+        try:
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                for member in zf.infolist():
+                    member_target = os.path.abspath(os.path.join(temp, member.filename))
+                    temp_prefix = os.path.abspath(temp) + os.sep
+                    if member_target != os.path.abspath(temp) and not member_target.startswith(temp_prefix):
+                        raise RuntimeError("arquivo inseguro no bundle: " + member.filename)
+                zf.extractall(temp)
+            if os.path.isdir(target):
+                shutil.rmtree(target)
+            os.replace(temp, target)
+        except Exception:
+            shutil.rmtree(temp, ignore_errors=True)
+            raise
+
     def update_port(self):
         if self.updating or (self.process and self.process.poll() is None):
             messagebox.showinfo("Atualizar port", "Encerre o jogo antes de aplicar uma atualização.")
@@ -352,6 +447,8 @@ class FirstLightLauncher:
                 rel = item.get("path")
                 url = item.get("url")
                 required = bool(item.get("required", False))
+                kind = item.get("kind")
+                extract_to = item.get("extract_to")
                 if not isinstance(rel, str) or not rel or not isinstance(url, str) or not url:
                     continue
                 self.events.put(("update_status", "Baixando " + rel + "..."))
@@ -384,6 +481,12 @@ class FirstLightLauncher:
                 except OSError:
                     pass
                 if local_sha256 == remote_sha256:
+                    if kind == "zip_bundle" and isinstance(extract_to, str) and extract_to:
+                        bundle_marker = os.path.join(
+                            self.base, extract_to.replace("/", os.sep), "dzn_icd.x86_64.json"
+                        )
+                        if not os.path.isfile(bundle_marker):
+                            self.install_zip_bundle(destination, extract_to)
                     unchanged.append(rel)
                     continue
 
@@ -408,6 +511,8 @@ class FirstLightLauncher:
                             "falha ao verificar arquivo instalado: %s (esperado=%s instalado=%s)"
                             % (rel, remote_sha256, installed_sha256)
                         )
+                    if kind == "zip_bundle" and isinstance(extract_to, str) and extract_to:
+                        self.install_zip_bundle(destination, extract_to)
                     changed.append(rel)
 
             state = {
@@ -642,6 +747,7 @@ class FirstLightLauncher:
             APP_TITLE,
             "Gerado: " + time.strftime("%Y-%m-%d %H:%M:%S"),
             "Jogo: " + self.game_dir.get().strip(),
+            "Backend: " + self.backend.get(),
             "Exit code: " + str(self.last_exit_code),
             "Status: " + self.status.get(),
             "Motivo: " + self.reason.get(),
