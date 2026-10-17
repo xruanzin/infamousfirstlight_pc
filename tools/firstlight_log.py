@@ -7,7 +7,8 @@ from pathlib import Path
 PATTERNS=[
  ("unsupported_import",re.compile(r"STOP: first unsupported PS4 import:\s*(\S+)")),
  ("guest_fault",re.compile(r"(?:Guest fault.*guest offset|Fault:.*guest offset)\s*(0x[0-9a-fA-F]+)")),
- ("driver_fault",re.compile(r"(amdvlk64\.dll|atio6axx\.dll|nvoglv64\.dll|nvwgf2umx\.dll)",re.I)),
+ ("vulkan_layer_fault",re.compile(r"(RTSSVkLayer64\.dll|RTSSVkLayer32\.dll|VkLayer[^\\s+]*\.dll)",re.I)),
+ ("driver_fault",re.compile(r"(amdvlk64\.dll|atio6axx\.dll|nvoglv64\.dll|nvwgf2umx\.dll|D3D12Core\.dll)",re.I)),
  ("gpu_capability_block",re.compile(r"(Unsupported Vulkan image combination was blocked|Refusing unsupported image before vkCreateImage)",re.I)),
  ("gpu_assertion",re.compile(r"(STOP: GPU library assertion failed|Assertion Failed!)",re.I)),
  ("watchdog",re.compile(r"STOP: watchdog timeout")),
@@ -54,6 +55,7 @@ def main()->int:
  next_action={
   "unsupported_import":"implement or bind the reported ABI contract; do not success-stub it blindly",
   "guest_fault":"inspect the reported guest offset and its inputs/last runtime calls",
+  "vulkan_layer_fault":"disable the faulting third-party Vulkan layer/overlay and retry before changing renderer semantics",
   "driver_fault":"isolate the GPU command/resource path before changing guest semantics",
   "windows_heap_corruption":"inspect the earliest memory overwrite or mismatched allocation/free before the Windows heap abort",
   "windows_access_violation":"inspect the faulting native/guest address and the immediately preceding runtime/GPU operation",
