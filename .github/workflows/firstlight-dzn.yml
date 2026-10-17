@@ -1,0 +1,119 @@
+name: First Light DirectX 12 backend
+
+concurrency:
+  group: firstlight-dzn-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [firstlight-bootstrap]
+    paths:
+      - ".github/workflows/firstlight-dzn.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dzn:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: >-
+            mingw-w64-clang-x86_64-mesa
+            mingw-w64-clang-x86_64-vulkan-loader
+
+      - name: Stage Mesa DZN and runtime dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          rm -rf out/dzn
+          mkdir -p out/dzn
+
+          declare -A seen
+          queue=(/clang64/bin/vulkan_dzn.dll)
+          while (("${#queue[@]}")); do
+            dll="${queue[0]}"
+            queue=("${queue[@]:1}")
+            if [[ -n "${seen[$dll]+x}" ]]; then
+              continue
+            fi
+            seen["$dll"]=1
+            cp -f "$dll" "out/dzn/$(basename "$dll")"
+            while IFS= read -r dep; do
+              [[ -n "$dep" ]] && queue+=("$dep")
+            done < <(ldd "$dll" | awk '$3 ~ /^\/clang64\/bin\// {print $3}')
+          done
+
+          cp -f /clang64/share/vulkan/icd.d/dzn_icd.x86_64.json out/dzn/dzn_icd.x86_64.json
+          test -s out/dzn/vulkan_dzn.dll
+          test -s out/dzn/dzn_icd.x86_64.json
+          echo "DZN bundle files:"
+          ls -lh out/dzn
+
+      - name: Make portable ICD manifest and zip
+        shell: pwsh
+        run: |
+          $manifestPath = "out/dzn/dzn_icd.x86_64.json"
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $manifest.ICD.library_path = ".\vulkan_dzn.dll"
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content $manifestPath -Encoding UTF8
+
+          $zip = "out/firstlight-dzn.zip"
+          Remove-Item $zip -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "out/dzn/*" -DestinationPath $zip -CompressionLevel Optimal
+          if (-not (Test-Path $zip)) { throw "DZN bundle zip was not created" }
+
+      - name: Publish rolling DZN bundle
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view firstlight-dev-dzn --repo ${{ github.repository }} *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create firstlight-dev-dzn --repo ${{ github.repository }} --prerelease --title "First Light DirectX 12 backend" --notes "Portable Mesa Dozen (Vulkan over Direct3D 12) backend for AMD driver bypass testing."
+          }
+          gh release upload firstlight-dev-dzn out/firstlight-dzn.zip --repo ${{ github.repository }} --clobber
+
+      - name: Refresh DZN bundle digest
+        shell: pwsh
+        run: |
+          $digest = (Get-FileHash "out/firstlight-dzn.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          git fetch origin firstlight-bootstrap
+          git checkout -B firstlight-bootstrap origin/firstlight-bootstrap
+          $path = "runtime/update_manifest.json"
+          $manifest = Get-Content $path -Raw | ConvertFrom-Json
+          $found = $false
+          foreach ($file in $manifest.files) {
+            if ($file.path -eq "runtime/dzn_bundle.zip") {
+              $file.sha256 = $digest
+              $found = $true
+            }
+          }
+          if (-not $found) { throw "DZN bundle entry missing from update manifest" }
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content $path -Encoding UTF8
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $path
+          if (-not (git diff --cached --quiet)) {
+            git commit -m "runtime: refresh DirectX 12 backend digest"
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              git push origin HEAD:firstlight-bootstrap
+              if ($LASTEXITCODE -eq 0) { break }
+              git fetch origin firstlight-bootstrap
+              git rebase origin/firstlight-bootstrap
+              if ($LASTEXITCODE -ne 0) { throw "Failed to rebase DZN digest update" }
+              if ($attempt -eq 3) { throw "Failed to publish DZN digest after retries" }
+            }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firstlight-dzn
+          path: out/firstlight-dzn.zip
+          if-no-files-found: error
