@@ -79,6 +79,18 @@ foreach ($file in $manifest.files) {
 
     if ($oldSha -eq $newSha) {
         Remove-Item -Force -ErrorAction SilentlyContinue $temp
+        if ($file.kind -eq "zip_bundle" -and $file.extract_to) {
+            $extractTarget = Join-Path $PortablePath (([string]$file.extract_to) -replace '/', '\')
+            $marker = Join-Path $extractTarget "dzn_icd.x86_64.json"
+            if (-not (Test-Path $marker -PathType Leaf)) {
+                $extractTemp = "$extractTarget.new"
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $extractTemp
+                New-Item -ItemType Directory -Force $extractTemp | Out-Null
+                Expand-Archive -Path $destination -DestinationPath $extractTemp -Force
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $extractTarget
+                Move-Item -Force $extractTemp $extractTarget
+            }
+        }
         $unchanged += $rel
         Write-Host "[OK] $rel"
         continue
@@ -88,6 +100,15 @@ foreach ($file in $manifest.files) {
     $installedSha = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($installedSha -ne $newSha) {
         throw "Falha ao verificar arquivo instalado: $rel"
+    }
+    if ($file.kind -eq "zip_bundle" -and $file.extract_to) {
+        $extractTarget = Join-Path $PortablePath (([string]$file.extract_to) -replace '/', '\')
+        $extractTemp = "$extractTarget.new"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $extractTemp
+        New-Item -ItemType Directory -Force $extractTemp | Out-Null
+        Expand-Archive -Path $destination -DestinationPath $extractTemp -Force
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $extractTarget
+        Move-Item -Force $extractTemp $extractTarget
     }
     $changed += $rel
     Write-Host "[UPDATED] $rel  $installedSha"
